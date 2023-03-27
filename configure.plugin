@@ -1,0 +1,26 @@
+#!/bin/sh
+#
+
+plugin_usage() {
+    cat <<EOF
+EOF
+}
+
+plugin_option() {
+
+    case "$1" in
+        --with-kernel=*)
+            echo "WARNING: The --with-kernel option has no effect and will be removed in the future." >&2
+            return 0
+            ;;
+
+        --with-latest-kernel*)
+            echo "WARNING: The --with-latest-kernel option has no effect and will be removed in the future." >&2
+            return 0
+            ;;
+
+        *)
+            return 1;
+            ;;
+    esac
+}
