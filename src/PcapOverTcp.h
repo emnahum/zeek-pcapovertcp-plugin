@@ -58,6 +58,7 @@ private:
 	Stats stats;
 
 	int current_filter;
+	pcap_t * pcap;
 
 	unsigned int num_discarded;
 	int checksum_mode;

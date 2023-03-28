@@ -1,5 +1,8 @@
-1) What is the socket format for pcap/pcapng?  Where is it in Zeek?
-2) Where should I put pcapovertcp?
-3) What are is_live and link_type for pcapovertcp?
-4) Should I peek() before reading?
-5) Do they use libkqueue?
+- What is the socket format for pcap/pcapng?  Where is it in Zeek?
+
+- Should I peek() before reading? Probably, or do two reads.
+
+- Do they use libkqueue?
+
+- What are is_live and link_type for pcapovertcp?
+	  Default to true and DLT_EN10MB

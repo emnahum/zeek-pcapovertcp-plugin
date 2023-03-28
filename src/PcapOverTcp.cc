@@ -53,10 +53,9 @@ void PcapOverTcpSource::Open()
 	uint64_t buffer_size = zeek::BifConst::PcapOverTcp::buffer_size;
 	uint64_t block_size = zeek::BifConst::PcapOverTcp::block_size;
 	int block_timeout_msec = static_cast<int>(zeek::BifConst::PcapOverTcp::block_timeout * 1000.0);
-	int link_type = zeek::BifConst::PcapOverTcp::link_type;
-
 	// create socket
-	socket_fd = socket(AF_INET, SOCK_STREAM, htons(ETH_P_ALL));
+	Info("PcapOverTcpSource::Open creating socket");
+	socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if ( socket_fd < 0 )
 	{
 		Error(errno ? strerror(errno) : "unable to create socket");
@@ -94,19 +93,36 @@ void PcapOverTcpSource::Open()
 
 	// Connect to the server
 	int rv = connect(socket_fd, reinterpret_cast<sockaddr*>(&server_addr), sizeof(server_addr));
-
 	if ( rv < 0 ) 
 	{
 		Error(errno ? strerror(errno) : "unable to connect");
 		close(socket_fd);
 		return;
 	}
-
 	Info("PcapOverTcpSource::Open Connected ");
+
+	// get the initial global header
+	pcap_file_header global_hdr;
+	ssize_t bytes_received = recv(socket_fd, &global_hdr, sizeof(global_hdr), 0);
+	Info(util::fmt("PcapOverTcpSource::Open bytes_received is %d", 
+				static_cast<int>(bytes_received)));
+	if (bytes_received < 0) 
+	{
+		Error(errno ? strerror(errno) : "error reading socket");
+		close(socket_fd);
+		return;
+	}
+
+	Info(util::fmt("PcapOverTcpSource::Open magic is %ud",        global_hdr.magic));
+	Info(util::fmt("PcapOverTcpSource::Open version_major is %d", global_hdr.version_major));
+	Info(util::fmt("PcapOverTcpSource::Open version_major is %d", global_hdr.version_minor));
+	Info(util::fmt("PcapOverTcpSource::Open sigfigs is %d",       global_hdr.sigfigs));
+	Info(util::fmt("PcapOverTcpSource::Open linktype is %d",      global_hdr.linktype));
+
 	props.netmask = NETMASK_UNKNOWN;
 	props.selectable_fd = socket_fd;
 	props.is_live = true;
-	props.link_type = link_type;
+	props.link_type = global_hdr.linktype;
 
 	stats.received = stats.dropped = stats.link = stats.bytes_received = 0;
 	num_discarded = 0;
@@ -128,29 +144,21 @@ void PcapOverTcpSource::Close()
 	Info("PcapOverTcpSource::Close Exit");
 }
 
-#define BUFFER_SIZE (2*1024)
-
 bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 {
 	Info("PcapOverTcpSource::Extract Entry");
 	if ( ! socket_fd )
 		return false;
 
-	struct tpacket3_hdr *packet = 0;
-	const u_char *data;
-
-	char buffer[BUFFER_SIZE];
-
 	while ( true )
 	{
-		/* if no packet avail
-		 * if ( ! rx_ring->GetNextPacket(&packet) )
-		 *	return false;
-		 */
 		// read the next packet off the socket
-		
-		ssize_t bytes_received = recv(socket_fd, buffer, BUFFER_SIZE - 1, 0);
-		Info(util::fmt("PcapOverTcpSource::Extract bytes_received is %d", 
+		char   buffer[PCAP_ERRBUF_SIZE];
+		const u_char *data = (u_char *) buffer;
+	
+		// get the header first	
+		ssize_t bytes_received = recv(socket_fd, &current_hdr, sizeof(current_hdr), 0);
+		Info(util::fmt("PcapOverTcpSource::Extract bytes_received 1 is %d", 
 					static_cast<int>(bytes_received)));
 		if (bytes_received < 0) 
 		{
@@ -159,12 +167,31 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			return false;
 		}
 
-		current_hdr.ts.tv_sec = packet->tp_sec;
-		current_hdr.ts.tv_usec = packet->tp_nsec / 1000;
-		current_hdr.caplen = packet->tp_snaplen;
-		current_hdr.len = packet->tp_len;
-		data = (u_char *) packet + packet->tp_mac;
+		Info(util::fmt("PcapOverTcpSource::Extract len is %ud", current_hdr.len));
+		Info(util::fmt("PcapOverTcpSource::Extract caplen is %d", current_hdr.caplen));
+		Info(util::fmt("PcapOverTcpSource::Extract time is %ld", current_hdr.ts.tv_sec));
+		Info(util::fmt("PcapOverTcpSource::Extract utime is %ld", current_hdr.ts.tv_usec));
 
+		// check the header length isn't crazy
+		if (current_hdr.len > sizeof(buffer))
+		{
+			Error(errno ? strerror(errno) : "header length problem");
+			close(socket_fd);
+			return false;
+		}
+
+		// now read the packet
+		bytes_received = recv(socket_fd, buffer, current_hdr.len, 0);
+		Info(util::fmt("PcapOverTcpSource::Extract bytes_received 2 is %d", 
+					static_cast<int>(bytes_received)));
+		if (bytes_received < 0) 
+		{
+			Error(errno ? strerror(errno) : "error reading socket");
+			close(socket_fd);
+			return false;
+		}
+
+		// apply the BFF Filter
 		if ( !ApplyBPFFilter(current_filter, &current_hdr, data) )
 		{
 			++num_discarded;
@@ -172,48 +199,16 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			continue;
 		}
 
+		// call pkt-Init()
 		pkt->Init(props.link_type, &current_hdr.ts, current_hdr.caplen, current_hdr.len, data);
-
-		if ( packet->tp_status & TP_STATUS_VLAN_VALID )
-			pkt->vlan = packet->hv1.tp_vlan_tci;
-
-#if ZEEK_VERSION_NUMBER >= 50100
-		switch ( checksum_mode )
-		{
-			case BifEnum::AF_Packet::CHECKSUM_OFF:
-			{
-				// If set to off, just accept whatever checksum in the packet is correct and
-				// skip checking it here and in Zeek.
-				pkt->l4_checksummed = true;
-				break;
-			}
-			case BifEnum::AF_Packet::CHECKSUM_KERNEL:
-			{
-				// If set to kernel, check whether the kernel thinks the checksum is valid. If it
-				// does, tell Zeek to skip checking by itself.
-				if ( ( (packet->tp_status & TP_STATUS_CSUM_VALID) != 0 ) ||
-				     ( (packet->tp_status & TP_STATUS_CSUMNOTREADY) != 0 ) )
-					pkt->l4_checksummed = true;
-				else
-					pkt->l4_checksummed = false;
-				break;
-			}
-			case BifEnum::AF_Packet::CHECKSUM_ON:
-			default:
-			{
-				// Let Zeek handle it.
-				pkt->l4_checksummed = false;
-				break;
-			}
-		}
-#endif
 
 		if ( current_hdr.len == 0 || current_hdr.caplen == 0 )
 		{
-			Weird("empty_af_packet_header", pkt);
+			Weird("empty current header", pkt);
 			return false;
 		}
 
+		// update stats
 		stats.received++;
 		stats.bytes_received += current_hdr.len;
 		Info("PcapOverTcpSource::Extract Exit");
