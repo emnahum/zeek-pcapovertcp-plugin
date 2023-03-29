@@ -1,6 +1,4 @@
-- What is the socket format for pcap/pcapng?  Where is it in Zeek?
-
-- Should I peek() before reading? Probably, or do two reads.
+- Do I need to use ntoh for pcap_pkthdr?
 
 - Do they use libkqueue?
 
