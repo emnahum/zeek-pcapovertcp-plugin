@@ -12,12 +12,6 @@
 
 #include "pcapovertcp.bif.h"
 
-// CentOS 7 if_packet.h does not yet have this define, provide it
-// explicitly if missing.
-#ifndef TP_STATUS_CSUM_VALID
-#define TP_STATUS_CSUM_VALID (1 << 7)
-#endif
-
 using namespace zeek::iosource::pktsrc;
 
 PcapOverTcpSource::~PcapOverTcpSource()
@@ -41,8 +35,6 @@ PcapOverTcpSource::PcapOverTcpSource(const std::string& path, bool is_live)
 	props.path = path;
 	props.is_live = is_live;
 
-	// does PCAP over TCP support checksum offloads?
-	checksum_mode = zeek::BifConst::PcapOverTcp::checksum_validation_mode->AsEnum();
 	Info("PcapOverTcpSource: Exit");
 }
 
@@ -113,10 +105,12 @@ void PcapOverTcpSource::Open()
 		return;
 	}
 
-	Info(util::fmt("PcapOverTcpSource::Open magic is %ud",        global_hdr.magic));
+	Info(util::fmt("PcapOverTcpSource::Open magic is %x",         global_hdr.magic));
 	Info(util::fmt("PcapOverTcpSource::Open version_major is %d", global_hdr.version_major));
 	Info(util::fmt("PcapOverTcpSource::Open version_major is %d", global_hdr.version_minor));
+	Info(util::fmt("PcapOverTcpSource::Open thiszone is %d",      global_hdr.thiszone));
 	Info(util::fmt("PcapOverTcpSource::Open sigfigs is %d",       global_hdr.sigfigs));
+	Info(util::fmt("PcapOverTcpSource::Open snaplen is %d",       global_hdr.snaplen));
 	Info(util::fmt("PcapOverTcpSource::Open linktype is %d",      global_hdr.linktype));
 
 	props.netmask = NETMASK_UNKNOWN;
@@ -147,18 +141,21 @@ void PcapOverTcpSource::Close()
 bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 {
 	Info("PcapOverTcpSource::Extract Entry");
-	if ( ! socket_fd )
+	if ( ! socket_fd ) 
+	{
+		Info("PcapOverTcpSource::Extract socket is closed");
 		return false;
+	}
 
 	while ( true )
 	{
 		// read the next packet off the socket
-		char   buffer[PCAP_ERRBUF_SIZE];
+		char   buffer[32*1024];
 		const u_char *data = (u_char *) buffer;
 	
 		// get the header first	
 		ssize_t bytes_received = recv(socket_fd, &current_hdr, sizeof(current_hdr), 0);
-		Info(util::fmt("PcapOverTcpSource::Extract bytes_received 1 is %d", 
+		Info(util::fmt("PcapOverTcpSource::Extract header bytes_received is %d", 
 					static_cast<int>(bytes_received)));
 		if (bytes_received < 0) 
 		{
@@ -183,7 +180,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 
 		// now read the packet
 		bytes_received = recv(socket_fd, buffer, current_hdr.len, 0);
-		Info(util::fmt("PcapOverTcpSource::Extract bytes_received 2 is %d", 
+		Info(util::fmt("PcapOverTcpSource::Extract buffer bytes_received is %d", 
 					static_cast<int>(bytes_received)));
 		if (bytes_received < 0) 
 		{
