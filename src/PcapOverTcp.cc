@@ -69,9 +69,9 @@ void PcapOverTcpSource::Open()
 	// Extract the IP address and port number as separate strings
 	std::string server_ip = props.path.substr(0, colon_pos);
 	std::string port_str = props.path.substr(colon_pos + 1);
-
 	Info(util::fmt("PcapOverTcpSource::Open server_ip is %s", server_ip.c_str()));
 	Info(util::fmt("PcapOverTcpSource::Open port_str is %s",  port_str.c_str()));
+
 	// Convert the port number string to an integer
 	int port_number = std::stoi(port_str);
 	Info(util::fmt("PcapOverTcpSource::Open port_number is %d", port_number ));
@@ -107,7 +107,7 @@ void PcapOverTcpSource::Open()
 
 	Info(util::fmt("PcapOverTcpSource::Open magic is %x",         global_hdr.magic));
 	Info(util::fmt("PcapOverTcpSource::Open version_major is %d", global_hdr.version_major));
-	Info(util::fmt("PcapOverTcpSource::Open version_major is %d", global_hdr.version_minor));
+	Info(util::fmt("PcapOverTcpSource::Open version_minor is %d", global_hdr.version_minor));
 	Info(util::fmt("PcapOverTcpSource::Open thiszone is %d",      global_hdr.thiszone));
 	Info(util::fmt("PcapOverTcpSource::Open sigfigs is %d",       global_hdr.sigfigs));
 	Info(util::fmt("PcapOverTcpSource::Open snaplen is %d",       global_hdr.snaplen));
@@ -160,20 +160,22 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		if (bytes_received < 0) 
 		{
 			Error(errno ? strerror(errno) : "error reading socket");
-			close(socket_fd);
 			return false;
 		}
 
-		Info(util::fmt("PcapOverTcpSource::Extract len is %d", current_hdr.len));
-		Info(util::fmt("PcapOverTcpSource::Extract caplen is %d", current_hdr.caplen));
-		Info(util::fmt("PcapOverTcpSource::Extract time is %ld", current_hdr.ts.tv_sec));
-		Info(util::fmt("PcapOverTcpSource::Extract utime is %ld", current_hdr.ts.tv_usec));
+		Info(util::fmt("PcapOverTcpSource::Extract time is %ld", 
+			current_hdr.ts.tv_sec));
+		Info(util::fmt("PcapOverTcpSource::Extract utime is %ld", 
+			current_hdr.ts.tv_usec));
+		Info(util::fmt("PcapOverTcpSource::Extract len is %d", 
+			current_hdr.len));
+		Info(util::fmt("PcapOverTcpSource::Extract caplen is %d", 
+			current_hdr.caplen));
 
 		// check the header length isn't crazy
 		if (current_hdr.len > sizeof(buffer))
 		{
 			Error(errno ? strerror(errno) : "header length problem");
-			close(socket_fd);
 			return false;
 		}
 		Info("PcapOverTcpSource::Extract checked hdr len");
@@ -185,7 +187,6 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		if (bytes_received < 0) 
 		{
 			Error(errno ? strerror(errno) : "error reading socket");
-			close(socket_fd);
 			return false;
 		}
 
