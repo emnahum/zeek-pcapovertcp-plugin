@@ -167,7 +167,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			return false;
 		}
 
-		Info(util::fmt("PcapOverTcpSource::Extract len is %ud", current_hdr.len));
+		Info(util::fmt("PcapOverTcpSource::Extract len is %d", current_hdr.len));
 		Info(util::fmt("PcapOverTcpSource::Extract caplen is %d", current_hdr.caplen));
 		Info(util::fmt("PcapOverTcpSource::Extract time is %ld", current_hdr.ts.tv_sec));
 		Info(util::fmt("PcapOverTcpSource::Extract utime is %ld", current_hdr.ts.tv_usec));
@@ -179,6 +179,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			close(socket_fd);
 			return false;
 		}
+		Info("PcapOverTcpSource::Extract checked hdr len");
 
 		// now read the packet
 		bytes_received = recv(socket_fd, buffer, current_hdr.len, 0);
