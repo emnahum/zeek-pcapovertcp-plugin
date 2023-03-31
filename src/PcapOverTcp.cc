@@ -138,6 +138,16 @@ void PcapOverTcpSource::Close()
 	Info("PcapOverTcpSource::Close Exit");
 }
 
+// stolen from libpcap/pcap-util.h.  Apparently ntohl() doesn't cut it.
+#define SWAPLONG(y) \
+	(((((u_int)(y))&0xff)<<24) | \
+	((((u_int)(y))&0xff00)<<8) | \
+	((((u_int)(y))&0xff0000)>>8) | \
+	((((u_int)(y))>>24)&0xff))
+#define SWAPSHORT(y) \
+	((u_short)(((((u_int)(y))&0xff)<<8) | \
+	((((u_int)(y))&0xff00)>>8)))
+
 bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 {
 	Info("PcapOverTcpSource::Extract Entry");
@@ -163,6 +173,22 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			return false;
 		}
 
+		Info("PcapOverTcpSource::Extract BEFORE SWAP");
+		Info(util::fmt("PcapOverTcpSource::Extract time is %ld", 
+			current_hdr.ts.tv_sec));
+		Info(util::fmt("PcapOverTcpSource::Extract utime is %ld", 
+			current_hdr.ts.tv_usec));
+		Info(util::fmt("PcapOverTcpSource::Extract len is %d", 
+			current_hdr.len));
+		Info(util::fmt("PcapOverTcpSource::Extract caplen is %d", 
+			current_hdr.caplen));
+	
+		current_hdr.ts.tv_sec = SWAPLONG(current_hdr.ts.tv_sec);
+		current_hdr.ts.tv_sec = SWAPLONG(current_hdr.ts.tv_usec);
+		current_hdr.len       = SWAPLONG(current_hdr.len);
+		current_hdr.caplen    = SWAPLONG(current_hdr.caplen);
+
+		Info("PcapOverTcpSource::Extract AFTER SWAP");
 		Info(util::fmt("PcapOverTcpSource::Extract time is %ld", 
 			current_hdr.ts.tv_sec));
 		Info(util::fmt("PcapOverTcpSource::Extract utime is %ld", 
