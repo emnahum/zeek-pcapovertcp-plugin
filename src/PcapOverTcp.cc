@@ -26,7 +26,7 @@ PcapOverTcpSource::~PcapOverTcpSource()
 //
 PcapOverTcpSource::PcapOverTcpSource(const std::string& path, bool is_live)
 {
-	Info("PcapOverTcpSource: Entry");
+	Info("PcapOverTcpSource: Constructor Entry");
 	// does PCAP over TCP support live or non-live traffic?j
 	if ( ! is_live )
 		Error("PcapOverTcp source does not support offline input");
@@ -35,7 +35,7 @@ PcapOverTcpSource::PcapOverTcpSource(const std::string& path, bool is_live)
 	props.path = path;
 	props.is_live = is_live;
 
-	Info("PcapOverTcpSource: Exit");
+	Info("PcapOverTcpSource: Constructor Exit");
 }
 
 void PcapOverTcpSource::Open()
@@ -176,6 +176,15 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			return false;
 		}
 
+		// check for EOF
+		if (bytes_received == 0) 
+		{
+			// socket is out of data
+			Info("PcapOverTcpSource::Extract OOD");
+			close(socket_fd);
+			return false;
+		}
+
 		// Info(util::fmt("PcapOverTcpSource::Extract time is %d", 
 		//      sf_pkthdr.ts.tv_sec));
 		// Info(util::fmt("PcapOverTcpSource::Extract utime is %d", 
@@ -208,6 +217,17 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			Error(errno ? strerror(errno) : "error reading socket");
 			return false;
 		}
+	
+		// EOF will probably be caught above, so probably don't need this, 
+		// but just in case...	
+		if (bytes_received == 0) 
+		{
+			// socket is out of data
+			Info("PcapOverTcpSource::Extract OOD2");
+			close(socket_fd);
+			return false;
+		}
+
 		// Info(util::fmt("PcapOverTcpSource::Extract caplen is same as recv len (%d)", 
 		// 	current_hdr.caplen));
 		
@@ -258,28 +278,15 @@ bool PcapOverTcpSource::PrecompileFilter(int index, const std::string& filter)
 // get the statistics for the packet source
 void PcapOverTcpSource::Statistics(Stats* s)
 {
+	Info("PcapOverTcpSource::Stats Open");
 	if ( ! socket_fd )
 	{
 		s->received = s->bytes_received = s->link = s->dropped = 0;
 		return;
 	}
 
-	struct tpacket_stats_v3 tp_stats;
-	socklen_t tp_stats_len = sizeof (struct tpacket_stats_v3);
-	int ret;
-
-	ret = getsockopt(socket_fd, SOL_PACKET, PACKET_STATISTICS, &tp_stats, &tp_stats_len);
-	if ( ret < 0 )
-	{
-		Error(errno ? strerror(errno) : "unable to retrieve statistics");
-		s->received = s->bytes_received = s->link = s->dropped = 0;
-		return;
-	}
-
-	stats.link += tp_stats.tp_packets;
-	stats.dropped += tp_stats.tp_drops;
-
 	memcpy(s, &stats, sizeof(Stats));
+	Info("PcapOverTcpSource::Stats Exit");
 }
 
 zeek::iosource::PktSrc* PcapOverTcpSource::InstantiatePcapOverTcp(const std::string& path, bool is_live)
