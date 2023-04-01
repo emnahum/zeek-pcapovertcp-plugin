@@ -138,19 +138,21 @@ void PcapOverTcpSource::Close()
 	Info("PcapOverTcpSource::Close Exit");
 }
 
-// stolen from libpcap/pcap-util.h.  Apparently ntohl() doesn't cut it.
-#define SWAPLONG(y) \
-	(((((u_int)(y))&0xff)<<24) | \
-	((((u_int)(y))&0xff00)<<8) | \
-	((((u_int)(y))&0xff0000)>>8) | \
-	((((u_int)(y))>>24)&0xff))
-#define SWAPSHORT(y) \
-	((u_short)(((((u_int)(y))&0xff)<<8) | \
-	((((u_int)(y))&0xff00)>>8)))
+// stolen from libpcap/pcap-int.h.  Not exported by libpcap
+struct pcap_timeval {
+     bpf_int32 tv_sec;           /* seconds */
+     bpf_int32 tv_usec;          /* microseconds */
+};
+
+struct pcap_sf_pkthdr {
+     struct pcap_timeval ts;     /* time stamp */
+     bpf_u_int32 caplen;         /* length of portion present */
+     bpf_u_int32 len;            /* length of this packet (off wire) */
+};
 
 bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 {
-	Info("PcapOverTcpSource::Extract Entry");
+	// Info("PcapOverTcpSource::Extract Entry");
 	if ( ! socket_fd ) 
 	{
 		Info("PcapOverTcpSource::Extract socket is closed");
@@ -160,62 +162,55 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 	while ( true )
 	{
 		// read the next packet off the socket
-		char   buffer[32*1024];
+		char   buffer[64*1024];
 		const u_char *data = (u_char *) buffer;
+		struct pcap_sf_pkthdr sf_pkthdr;
 	
-		// get the header first	
-		ssize_t bytes_received = recv(socket_fd, &current_hdr, sizeof(current_hdr), 0);
-		Info(util::fmt("PcapOverTcpSource::Extract header bytes_received is %d", 
-					static_cast<int>(bytes_received)));
+		// get the sf header first	
+		ssize_t bytes_received = recv(socket_fd, &sf_pkthdr, sizeof(sf_pkthdr), 0);
+		// Info(util::fmt("PcapOverTcpSource::Extract header bytes_received is %d", 
+		// 	static_cast<int>(bytes_received)));
 		if (bytes_received < 0) 
 		{
 			Error(errno ? strerror(errno) : "error reading socket");
 			return false;
 		}
 
-		Info("PcapOverTcpSource::Extract BEFORE SWAP");
-		Info(util::fmt("PcapOverTcpSource::Extract time is %ld", 
-			current_hdr.ts.tv_sec));
-		Info(util::fmt("PcapOverTcpSource::Extract utime is %ld", 
-			current_hdr.ts.tv_usec));
-		Info(util::fmt("PcapOverTcpSource::Extract len is %d", 
-			current_hdr.len));
-		Info(util::fmt("PcapOverTcpSource::Extract caplen is %d", 
-			current_hdr.caplen));
-	
-		current_hdr.ts.tv_sec = SWAPLONG(current_hdr.ts.tv_sec);
-		current_hdr.ts.tv_sec = SWAPLONG(current_hdr.ts.tv_usec);
-		current_hdr.len       = SWAPLONG(current_hdr.len);
-		current_hdr.caplen    = SWAPLONG(current_hdr.caplen);
+		// Info(util::fmt("PcapOverTcpSource::Extract time is %d", 
+		//      sf_pkthdr.ts.tv_sec));
+		// Info(util::fmt("PcapOverTcpSource::Extract utime is %d", 
+		 // 	sf_pkthdr.ts.tv_usec));
+		// Info(util::fmt("PcapOverTcpSource::Extract len is %d", 
+		// 	sf_pkthdr.len));
+		// Info(util::fmt("PcapOverTcpSource::Extract caplen is %d", 
+		// 	sf_pkthdr.caplen));
 
-		Info("PcapOverTcpSource::Extract AFTER SWAP");
-		Info(util::fmt("PcapOverTcpSource::Extract time is %ld", 
-			current_hdr.ts.tv_sec));
-		Info(util::fmt("PcapOverTcpSource::Extract utime is %ld", 
-			current_hdr.ts.tv_usec));
-		Info(util::fmt("PcapOverTcpSource::Extract len is %d", 
-			current_hdr.len));
-		Info(util::fmt("PcapOverTcpSource::Extract caplen is %d", 
-			current_hdr.caplen));
+		// copy over from sf header to packet header, which Zeek expects	
+		current_hdr.ts.tv_sec = sf_pkthdr.ts.tv_sec;
+		current_hdr.ts.tv_usec = sf_pkthdr.ts.tv_usec;
+		current_hdr.len = sf_pkthdr.len;
+		current_hdr.caplen = sf_pkthdr.caplen;
 
 		// check the header length isn't crazy
-		if (current_hdr.len > sizeof(buffer))
+		if (current_hdr.caplen > sizeof(buffer))
 		{
 			Error(errno ? strerror(errno) : "header length problem");
 			return false;
 		}
-		Info("PcapOverTcpSource::Extract checked hdr len");
+		// Info("PcapOverTcpSource::Extract checked hdr len");
 
 		// now read the packet
-		bytes_received = recv(socket_fd, buffer, current_hdr.len, 0);
-		Info(util::fmt("PcapOverTcpSource::Extract buffer bytes_received is %d", 
-					static_cast<int>(bytes_received)));
+		bytes_received = recv(socket_fd, buffer, current_hdr.caplen, 0);
+		// Info(util::fmt("PcapOverTcpSource::Extract buffer bytes_received is %d", 
+		//		static_cast<int>(bytes_received)));
 		if (bytes_received < 0) 
 		{
 			Error(errno ? strerror(errno) : "error reading socket");
 			return false;
 		}
-
+		// Info(util::fmt("PcapOverTcpSource::Extract caplen is same as recv len (%d)", 
+		// 	current_hdr.caplen));
+		
 		// apply the BFF Filter
 		if ( !ApplyBPFFilter(current_filter, &current_hdr, data) )
 		{
@@ -236,7 +231,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		// update stats
 		stats.received++;
 		stats.bytes_received += current_hdr.len;
-		Info("PcapOverTcpSource::Extract Exit");
+		// Info("PcapOverTcpSource::Extract Exit");
 		return true;
 	}
 
