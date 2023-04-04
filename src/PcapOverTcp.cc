@@ -1,5 +1,8 @@
 
 #include "zeek/zeek-config.h"
+#include "zeek/DebugLogger.h"
+#include "Plugin.h"
+
 
 // Starting with Zeek 6.0, zeek-config.h does not provide the
 // ZEEK_VERSION_NUMBER macro anymore when compiling a included
@@ -14,6 +17,8 @@
 
 using namespace zeek::iosource::pktsrc;
 
+plugin::Zeek_PcapOverTcp::Plugin PcapOverTcpFoo;
+
 PcapOverTcpSource::~PcapOverTcpSource()
 {
 	Close();
@@ -26,7 +31,7 @@ PcapOverTcpSource::~PcapOverTcpSource()
 //
 PcapOverTcpSource::PcapOverTcpSource(const std::string& path, bool is_live)
 {
-	Info("PcapOverTcpSource: Constructor Entry");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource: Constructor Entry");
 	// does PCAP over TCP support live or non-live traffic?j
 	if ( ! is_live )
 		Error("PcapOverTcp source does not support offline input");
@@ -35,18 +40,15 @@ PcapOverTcpSource::PcapOverTcpSource(const std::string& path, bool is_live)
 	props.path = path;
 	props.is_live = is_live;
 
-	Info("PcapOverTcpSource: Constructor Exit");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource: Constructor Exit");
 }
 
 void PcapOverTcpSource::Open()
 {
-	Info("PcapOverTcpSource::Open Entry");
-	// grab various constants defined in .bif file.
-	uint64_t buffer_size = zeek::BifConst::PcapOverTcp::buffer_size;
-	uint64_t block_size = zeek::BifConst::PcapOverTcp::block_size;
-	int block_timeout_msec = static_cast<int>(zeek::BifConst::PcapOverTcp::block_timeout * 1000.0);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open Entry");
+	
 	// create socket
-	Info("PcapOverTcpSource::Open creating socket");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open creating socket");
 	socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if ( socket_fd < 0 )
 	{
@@ -58,7 +60,8 @@ void PcapOverTcpSource::Open()
 	// are we a client or a server?  Just a client for now.
 
 	// find the IP addr and port of server
-	Info(util::fmt("PcapOverTcpSource::Open path is %s", props.path.c_str()));
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open path is %s", 
+			props.path.c_str());
 	size_t colon_pos = props.path.find(':');
 	if (colon_pos == std::string::npos) 
 	{
@@ -69,12 +72,15 @@ void PcapOverTcpSource::Open()
 	// Extract the IP address and port number as separate strings
 	std::string server_ip = props.path.substr(0, colon_pos);
 	std::string port_str = props.path.substr(colon_pos + 1);
-	Info(util::fmt("PcapOverTcpSource::Open server_ip is %s", server_ip.c_str()));
-	Info(util::fmt("PcapOverTcpSource::Open port_str is %s",  port_str.c_str()));
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open server_ip is %s", 
+			server_ip.c_str());
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open port_str is %s",  
+			port_str.c_str());
 
 	// Convert the port number string to an integer
 	int port_number = std::stoi(port_str);
-	Info(util::fmt("PcapOverTcpSource::Open port_number is %d", port_number ));
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open port_number is %d", 
+			port_number );
 	
 	// setup server_addr for connect
 	struct sockaddr_in server_addr;
@@ -91,13 +97,13 @@ void PcapOverTcpSource::Open()
 		close(socket_fd);
 		return;
 	}
-	Info("PcapOverTcpSource::Open Connected ");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open Connected ");
 
 	// get the initial global header
 	pcap_file_header global_hdr;
 	ssize_t bytes_received = recv(socket_fd, &global_hdr, sizeof(global_hdr), 0);
-	Info(util::fmt("PcapOverTcpSource::Open bytes_received is %d", 
-				static_cast<int>(bytes_received)));
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open bytes_received is %d", 
+			static_cast<int>(bytes_received));
 	if (bytes_received < 0) 
 	{
 		Error(errno ? strerror(errno) : "error reading socket");
@@ -105,13 +111,20 @@ void PcapOverTcpSource::Open()
 		return;
 	}
 
-	Info(util::fmt("PcapOverTcpSource::Open magic is %x",         global_hdr.magic));
-	Info(util::fmt("PcapOverTcpSource::Open version_major is %d", global_hdr.version_major));
-	Info(util::fmt("PcapOverTcpSource::Open version_minor is %d", global_hdr.version_minor));
-	Info(util::fmt("PcapOverTcpSource::Open thiszone is %d",      global_hdr.thiszone));
-	Info(util::fmt("PcapOverTcpSource::Open sigfigs is %d",       global_hdr.sigfigs));
-	Info(util::fmt("PcapOverTcpSource::Open snaplen is %d",       global_hdr.snaplen));
-	Info(util::fmt("PcapOverTcpSource::Open linktype is %d",      global_hdr.linktype));
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open magic is %x",         
+			global_hdr.magic);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open version_major is %d", 
+			global_hdr.version_major);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open version_minor is %d", 
+			global_hdr.version_minor);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open thiszone is %d",      
+			global_hdr.thiszone);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open sigfigs is %d",       
+			global_hdr.sigfigs);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open snaplen is %d",       
+			global_hdr.snaplen);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open linktype is %d",      
+			global_hdr.linktype);
 
 	props.netmask = NETMASK_UNKNOWN;
 	props.selectable_fd = socket_fd;
@@ -122,12 +135,12 @@ void PcapOverTcpSource::Open()
 	num_discarded = 0;
 
 	Opened(props);
-	Info("PcapOverTcpSource::Open Exit");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open Exit");
 }
 
 void PcapOverTcpSource::Close()
 {
-	Info("PcapOverTcpSource::Close Entry");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Close Entry");
 	if ( ! socket_fd )
 		return;
 
@@ -135,7 +148,7 @@ void PcapOverTcpSource::Close()
 	socket_fd = 0;
 
 	Closed();
-	Info("PcapOverTcpSource::Close Exit");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Close Exit");
 }
 
 // stolen from libpcap/pcap-int.h.  Not exported by libpcap
@@ -152,10 +165,10 @@ struct pcap_sf_pkthdr {
 
 bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 {
-	// Info("PcapOverTcpSource::Extract Entry");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract Entry");
 	if ( ! socket_fd ) 
 	{
-		Info("PcapOverTcpSource::Extract socket is closed");
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract socket is closed");
 		return false;
 	}
 
@@ -168,8 +181,9 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 	
 		// get the sf header first	
 		ssize_t bytes_received = recv(socket_fd, &sf_pkthdr, sizeof(sf_pkthdr), 0);
-		// Info(util::fmt("PcapOverTcpSource::Extract header bytes_received is %d", 
-		// 	static_cast<int>(bytes_received)));
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
+				"PcapOverTcpSource::Extract header bytes_received is %d", 
+		 		static_cast<int>(bytes_received));
 		if (bytes_received < 0) 
 		{
 			Error(errno ? strerror(errno) : "error reading socket");
@@ -180,19 +194,19 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		if (bytes_received == 0) 
 		{
 			// socket is out of data
-			Info("PcapOverTcpSource::Extract OOD");
+			PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract OOD");
 			close(socket_fd);
 			return false;
 		}
 
-		// Info(util::fmt("PcapOverTcpSource::Extract time is %d", 
-		//      sf_pkthdr.ts.tv_sec));
-		// Info(util::fmt("PcapOverTcpSource::Extract utime is %d", 
-		 // 	sf_pkthdr.ts.tv_usec));
-		// Info(util::fmt("PcapOverTcpSource::Extract len is %d", 
-		// 	sf_pkthdr.len));
-		// Info(util::fmt("PcapOverTcpSource::Extract caplen is %d", 
-		// 	sf_pkthdr.caplen));
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract time is   %d", 
+				sf_pkthdr.ts.tv_sec);
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract utime is  %d", 
+				sf_pkthdr.ts.tv_usec);
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract len is    %d", 
+				sf_pkthdr.len);
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract caplen is %d", 
+				sf_pkthdr.caplen);
 
 		// copy over from sf header to packet header, which Zeek expects	
 		current_hdr.ts.tv_sec = sf_pkthdr.ts.tv_sec;
@@ -206,12 +220,13 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			Error(errno ? strerror(errno) : "header length problem");
 			return false;
 		}
-		// Info("PcapOverTcpSource::Extract checked hdr len");
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract checked hdr len");
 
 		// now read the packet
 		bytes_received = recv(socket_fd, buffer, current_hdr.caplen, 0);
-		// Info(util::fmt("PcapOverTcpSource::Extract buffer bytes_received is %d", 
-		//		static_cast<int>(bytes_received)));
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
+				"PcapOverTcpSource::Extract buffer bytes_received is %d", 
+				static_cast<int>(bytes_received));
 		if (bytes_received < 0) 
 		{
 			Error(errno ? strerror(errno) : "error reading socket");
@@ -223,13 +238,14 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		if (bytes_received == 0) 
 		{
 			// socket is out of data
-			Info("PcapOverTcpSource::Extract OOD2");
+			PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract OOD2");
 			close(socket_fd);
 			return false;
 		}
 
-		// Info(util::fmt("PcapOverTcpSource::Extract caplen is same as recv len (%d)", 
-		// 	current_hdr.caplen));
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
+				"PcapOverTcpSource::Extract caplen is same as recv len (%d)", 
+				current_hdr.caplen);
 		
 		// apply the BFF Filter
 		if ( !ApplyBPFFilter(current_filter, &current_hdr, data) )
@@ -251,7 +267,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		// update stats
 		stats.received++;
 		stats.bytes_received += current_hdr.len;
-		// Info("PcapOverTcpSource::Extract Exit");
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract Exit");
 		return true;
 	}
 
@@ -278,7 +294,7 @@ bool PcapOverTcpSource::PrecompileFilter(int index, const std::string& filter)
 // get the statistics for the packet source
 void PcapOverTcpSource::Statistics(Stats* s)
 {
-	Info("PcapOverTcpSource::Stats Open");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Stats Open");
 	if ( ! socket_fd )
 	{
 		s->received = s->bytes_received = s->link = s->dropped = 0;
@@ -286,7 +302,7 @@ void PcapOverTcpSource::Statistics(Stats* s)
 	}
 
 	memcpy(s, &stats, sizeof(Stats));
-	Info("PcapOverTcpSource::Stats Exit");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Stats Exit");
 }
 
 zeek::iosource::PktSrc* PcapOverTcpSource::InstantiatePcapOverTcp(const std::string& path, bool is_live)

@@ -1,11 +1,9 @@
-- Do I need to use ntoh for pcap_pkthdr?
 
-- Do they use libkqueue?
+Where are extra conn entries coming from?
 
-- What are is_live and link_type for pcapovertcp?
-	  Default to true and DLT_EN10MB
+Do they use libkqueue?
 
 Things to try:
 - fixing socket options (check with tcp-splice)
-- getting rid of socket close?
-- debugging support
+  -- read vs. recv
+  -- setsockopts

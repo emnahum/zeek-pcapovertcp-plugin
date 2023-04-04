@@ -2,6 +2,9 @@
 #include "Plugin.h"
 #include "PcapOverTcp.h"
 #include "zeek/iosource/Component.h"
+#include "zeek/DebugLogger.h"
+
+plugin::Zeek_PcapOverTcp::Plugin PcapOverTcp;
 
 namespace plugin::Zeek_PcapOverTcp { Plugin plugin; }
 

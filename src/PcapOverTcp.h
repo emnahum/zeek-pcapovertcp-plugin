@@ -61,7 +61,6 @@ private:
 	pcap_t * pcap;
 
 	unsigned int num_discarded;
-	int checksum_mode;
 
 	int socket_fd;
 	struct pcap_pkthdr current_hdr;
