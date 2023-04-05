@@ -101,9 +101,14 @@ void PcapOverTcpSource::Open()
 
 	// get the initial global header
 	pcap_file_header global_hdr;
-	ssize_t bytes_received = recv(socket_fd, &global_hdr, sizeof(global_hdr), 0);
+	int bytes_received;
+	do {
+		 bytes_received = recv(socket_fd, &global_hdr, sizeof(global_hdr),
+                                    MSG_WAITALL);
+        } while ((bytes_received == -1) && (errno == EINTR));
+
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open bytes_received is %d", 
-			static_cast<int>(bytes_received));
+			bytes_received);
 	if (bytes_received < 0) 
 	{
 		Error(errno ? strerror(errno) : "error reading socket");
@@ -178,9 +183,14 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		char   buffer[64*1024];
 		const u_char *data = (u_char *) buffer;
 		struct pcap_sf_pkthdr sf_pkthdr;
+		int bytes_received;
 	
 		// get the sf header first	
-		ssize_t bytes_received = recv(socket_fd, &sf_pkthdr, sizeof(sf_pkthdr), 0);
+		do {
+			bytes_received = recv(socket_fd, &sf_pkthdr, sizeof(sf_pkthdr), 
+                                    MSG_WAITALL);
+		} while ((bytes_received == -1) && (errno == EINTR));
+
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
 				"PcapOverTcpSource::Extract header bytes_received is %d", 
 		 		static_cast<int>(bytes_received));
@@ -223,7 +233,11 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract checked hdr len");
 
 		// now read the packet
-		bytes_received = recv(socket_fd, buffer, current_hdr.caplen, 0);
+		do {
+			bytes_received = recv(socket_fd, buffer, current_hdr.caplen, 
+                                    MSG_WAITALL);
+		} while ((bytes_received == -1) && (errno == EINTR));
+
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
 				"PcapOverTcpSource::Extract buffer bytes_received is %d", 
 				static_cast<int>(bytes_received));
