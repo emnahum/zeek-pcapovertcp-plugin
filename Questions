@@ -2,8 +2,8 @@
 Where are extra conn entries coming from?
 
 Do they use libkqueue?
+Any explanation for undefined symbol on refactoring?
 
 Things to try:
-- fixing socket options (check with tcp-splice)
-  -- read vs. recv
   -- setsockopts
+  -- parameters (socket size)
