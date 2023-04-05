@@ -52,15 +52,24 @@ To use the PcapOverTcp plugin with `zeekctl`, the `custom` load balance method c
     [worker-1]
     type=worker
     host=localhost
-    interface=pcapovertcp::127.0.0.1:57012
+    interface=pcapovertcp::1.2.3.4:57012
     # Optional parameters for per node configuration:
     pcapovertcp_buffer_size=128*1024*1024
 
+    [worker-2]
+    type=worker
+    host=localhost
+    interface=pcapovertcp::1.2.3.5:57012
+    # Optional parameters for per node configuration:
+    pcapovertcp_buffer_size=128*1024*1024
+
+Note that the PcapOverTcp plugin does not yet support multiple workers consuming the same stream.
+
 ## Advanced Configuration
 
-While the plugin aims at providing a "plug and play" user experience, it exposes several configuration options of the underlying API for customization (see [init.zeek](scripts/init.zeek) for the default values):
+While the plugin aims at providing a "plug and play" user experience, it exposes at the momement one option of the underlying API for customization (see [init.zeek](scripts/init.zeek) for the default values):
 
-* `buffer_size`: Set the overall buffer size allocated per socket. As the buffer is divided into blocks, this should be a multiple of the block size.
+* `buffer_size`: Set the overall buffer size allocated per socket. 
 
 ## Limitations
 
