@@ -1,7 +1,7 @@
 
 # Zeek::PcapOverTcp
 
-This plugin provides native PcapOverTcp support for Zeek. For details about PcapOverTcp, see the corresponding [man page](https://www.netresec.com/?page=Blog&month=2022-08&post=What-is-PCAP-over-IP)
+This plugin provides native PcapOverTcp support for Zeek. For details about PcapOverTcp, see the corresponding [Netresec URL](https://www.netresec.com/?page=Blog&month=2022-08&post=What-is-PCAP-over-IP)
 
 ## Installation
 
