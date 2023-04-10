@@ -80,7 +80,7 @@ void PcapOverTcpSource::Open()
 	// get the initial global header
 	pcap_file_header global_hdr;
 	
-	ssize_t bytes_received = get_global_hdr(socket_fd, &global_hdr);
+	ssize_t bytes_received = get_global_hdr(socket_fd, global_hdr);
 	if (bytes_received != sizeof(global_hdr))
 	{
 		Error(errno ? strerror(errno) : "error reading socket");
@@ -303,7 +303,7 @@ int get_global_hdr(int socket_fd, pcap_file_header & global_hdr)
 			global_hdr.snaplen);
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open linktype is %d",      
 			global_hdr.linktype);
-	return 0;
+	return bytes_received;
 };
 
 int get_addr_and_port(const std::string& path, std::string server_ip, int * port)
