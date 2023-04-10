@@ -59,78 +59,36 @@ void PcapOverTcpSource::Open()
 	// set the socket params?
 	// are we a client or a server?  Just a client for now.
 
-	// find the IP addr and port of server
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open path is %s", 
-			props.path.c_str());
-	size_t colon_pos = props.path.find(':');
-	if (colon_pos == std::string::npos) 
+	std::string server_ip;
+	int port;
+
+	// get IP address and port to connect to
+	if (get_addr_and_port(props.path, server_ip, &port) < 1)
 	{
 		Error(errno ? strerror(errno) : "Invalid IP:PORT address format");
 		return;
 	}
 
-	// Extract the IP address and port number as separate strings
-	std::string server_ip = props.path.substr(0, colon_pos);
-	std::string port_str = props.path.substr(colon_pos + 1);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open server_ip is %s", 
-			server_ip.c_str());
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open port_str is %s",  
-			port_str.c_str());
-
-	// Convert the port number string to an integer
-	int port_number = std::stoi(port_str);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open port_number is %d", 
-			port_number );
-	
-	// setup server_addr for connect
-	struct sockaddr_in server_addr;
-	memset(&server_addr, 0, sizeof(server_addr));
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = inet_addr(server_ip.c_str());
-	server_addr.sin_port = htons(port_number);
-
-	// Connect to the server
-	int rv = connect(socket_fd, reinterpret_cast<sockaddr*>(&server_addr), sizeof(server_addr));
-	if ( rv < 0 ) 
+	// now try to connect to server
+	if (connect_to_server(socket_fd, server_ip, port) < 1)
 	{
 		Error(errno ? strerror(errno) : "unable to connect");
 		close(socket_fd);
 		return;
 	}
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open Connected ");
 
 	// get the initial global header
 	pcap_file_header global_hdr;
-	int bytes_received;
-	do {
-		 bytes_received = recv(socket_fd, &global_hdr, sizeof(global_hdr),
-                                    MSG_WAITALL);
-        } while ((bytes_received == -1) && (errno == EINTR));
-
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open bytes_received is %d", 
-			bytes_received);
-	if (bytes_received < 0) 
+	
+	ssize_t bytes_received = get_global_hdr(socket_fd, &global_hdr);
+	if (bytes_received != sizeof(global_hdr))
 	{
 		Error(errno ? strerror(errno) : "error reading socket");
 		close(socket_fd);
 		return;
 	}
 
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open magic is %x",         
-			global_hdr.magic);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open version_major is %d", 
-			global_hdr.version_major);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open version_minor is %d", 
-			global_hdr.version_minor);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open thiszone is %d",      
-			global_hdr.thiszone);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open sigfigs is %d",       
-			global_hdr.sigfigs);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open snaplen is %d",       
-			global_hdr.snaplen);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open linktype is %d",      
-			global_hdr.linktype);
-
+	// fill in props
 	props.netmask = NETMASK_UNKNOWN;
 	props.selectable_fd = socket_fd;
 	props.is_live = true;
@@ -185,12 +143,12 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		struct pcap_sf_pkthdr sf_pkthdr;
 		int bytes_received;
 	
-		// get the sf header first	
+		// get the sf header first
 		do {
-			bytes_received = recv(socket_fd, &sf_pkthdr, sizeof(sf_pkthdr), 
-                                    MSG_WAITALL);
-		} while ((bytes_received == -1) && (errno == EINTR));
-
+                	bytes_received = recv(socket_fd, &sf_pkthdr, sizeof(sf_pkthdr), 
+				   MSG_WAITALL);
+                } while ((bytes_received == -1) && (errno == EINTR));
+  
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
 				"PcapOverTcpSource::Extract header bytes_received is %d", 
 		 		static_cast<int>(bytes_received));
@@ -233,11 +191,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract checked hdr len");
 
 		// now read the packet
-		do {
-			bytes_received = recv(socket_fd, buffer, current_hdr.caplen, 
-                                    MSG_WAITALL);
-		} while ((bytes_received == -1) && (errno == EINTR));
-
+		bytes_received = recv(socket_fd, buffer, current_hdr.caplen, MSG_WAITALL);
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
 				"PcapOverTcpSource::Extract buffer bytes_received is %d", 
 				static_cast<int>(bytes_received));
@@ -323,3 +277,79 @@ zeek::iosource::PktSrc* PcapOverTcpSource::InstantiatePcapOverTcp(const std::str
 {
 	return new PcapOverTcpSource(path, is_live);
 }
+
+
+int get_global_hdr(int socket_fd, pcap_file_header & global_hdr)
+{	
+	int bytes_received = recv(socket_fd, &global_hdr, sizeof(global_hdr), MSG_WAITALL);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open bytes_received is %d", 
+			bytes_received);
+	if (bytes_received < (int) sizeof(global_hdr)) 
+	{
+		return -1;
+	}
+
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open magic is %x",         
+			global_hdr.magic);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open version_major is %d", 
+			global_hdr.version_major);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open version_minor is %d", 
+			global_hdr.version_minor);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open thiszone is %d",      
+			global_hdr.thiszone);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open sigfigs is %d",       
+			global_hdr.sigfigs);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open snaplen is %d",       
+			global_hdr.snaplen);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open linktype is %d",      
+			global_hdr.linktype);
+	return 0;
+};
+
+int get_addr_and_port(const std::string& path, std::string server_ip, int * port)
+{
+	// find the IP addr and port of server
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open path is %s", 
+			path.c_str());
+	size_t colon_pos = path.find(':');
+	if (colon_pos == std::string::npos) 
+	{
+		return -1;
+	}
+
+	// Extract the IP address and port number as separate strings
+	server_ip = path.substr(0, colon_pos);
+	std::string port_str = path.substr(colon_pos + 1);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open server_ip is %s", 
+			server_ip.c_str());
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open port_str is %s",  
+			port_str.c_str());
+
+	// Convert the port number string to an integer
+	int port_number = std::stoi(port_str);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open port_number is %d", 
+			port_number );
+	*port = port_number;
+	return 0;
+}
+
+int connect_to_server(int socket_fd, std::string server_ip, int port_number)
+{
+	// setup server_addr for connect
+	struct sockaddr_in server_addr;
+	memset(&server_addr, 0, sizeof(server_addr));
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_addr.s_addr = inet_addr(server_ip.c_str());
+	server_addr.sin_port = htons(port_number);
+
+	// Connect to the server
+	int rv = connect(socket_fd, reinterpret_cast<sockaddr*>(&server_addr), sizeof(server_addr));
+	if ( rv < 0 ) 
+	{
+		return -1;
+	}
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open Connected ");
+
+	return 0;
+}
+
