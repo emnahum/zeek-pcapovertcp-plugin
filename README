@@ -65,6 +65,10 @@ To use the PcapOverTcp plugin with `zeekctl`, the `custom` load balance method c
 
 Note that the PcapOverTcp plugin does not yet support multiple workers consuming the same stream.
 
+## Debugging the Plugin
+
+To debug the plugin, configure with --enable-debug.  Then when you run zeek, add '-B plugin-Zeek-PcapOverTcp'
+
 ## Advanced Configuration
 
 While the plugin aims at providing a "plug and play" user experience, it exposes at the momement one option of the underlying API for customization (see [init.zeek](scripts/init.zeek) for the default values):
