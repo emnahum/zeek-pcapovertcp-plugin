@@ -63,14 +63,14 @@ void PcapOverTcpSource::Open()
 	int port;
 
 	// get IP address and port to connect to
-	if (get_addr_and_port(props.path, server_ip, &port) < 1)
+	if (zpot_get_addr_and_port(props.path, server_ip, &port) < 1)
 	{
 		Error(errno ? strerror(errno) : "Invalid IP:PORT address format");
 		return;
 	}
 
 	// now try to connect to server
-	if (connect_to_server(socket_fd, server_ip, port) < 1)
+	if (zpot_connect_to_server(socket_fd, server_ip, port) < 1)
 	{
 		Error(errno ? strerror(errno) : "unable to connect");
 		close(socket_fd);
@@ -80,7 +80,7 @@ void PcapOverTcpSource::Open()
 	// get the initial global header
 	pcap_file_header global_hdr;
 	
-	ssize_t bytes_received = get_global_hdr(socket_fd, global_hdr);
+	ssize_t bytes_received = zpot_get_global_hdr(socket_fd, global_hdr);
 	if (bytes_received != sizeof(global_hdr))
 	{
 		Error(errno ? strerror(errno) : "error reading socket");
@@ -279,7 +279,7 @@ zeek::iosource::PktSrc* PcapOverTcpSource::InstantiatePcapOverTcp(const std::str
 }
 
 
-int get_global_hdr(int socket_fd, pcap_file_header & global_hdr)
+int zpot_get_global_hdr(int socket_fd, pcap_file_header & global_hdr)
 {	
 	int bytes_received = recv(socket_fd, &global_hdr, sizeof(global_hdr), MSG_WAITALL);
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open bytes_received is %d", 
@@ -306,7 +306,7 @@ int get_global_hdr(int socket_fd, pcap_file_header & global_hdr)
 	return bytes_received;
 };
 
-int get_addr_and_port(const std::string& path, std::string server_ip, int * port)
+int zpot_get_addr_and_port(const std::string& path, std::string &server_ip, int * port)
 {
 	// find the IP addr and port of server
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open path is %s", 
@@ -333,7 +333,7 @@ int get_addr_and_port(const std::string& path, std::string server_ip, int * port
 	return 0;
 }
 
-int connect_to_server(int socket_fd, std::string server_ip, int port_number)
+int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number)
 {
 	// setup server_addr for connect
 	struct sockaddr_in server_addr;
