@@ -65,12 +65,6 @@ private:
 	int socket_fd;
 	struct pcap_pkthdr current_hdr;
 
-	int zpot_get_global_hdr(int socket_fd, pcap_file_header & global_hdr);
-	int zpot_get_addr_and_port(const std::string& path, std::string server_ip, int * port);
-	int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number);
-	int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int bufsize);
-	int zpot_get_full_packet(int socket_fd, char * buffer, int bufsize);
-
 };
 
 }

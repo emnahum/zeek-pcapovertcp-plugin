@@ -15,6 +15,12 @@
 
 #include "pcapovertcp.bif.h"
 
+static int zpot_get_global_hdr(int socket_fd, pcap_file_header & global_hdr);
+static int zpot_get_addr_and_port(const std::string& path, std::string &server_ip, int * port);
+static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number);
+static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int bufsize);
+static int zpot_get_full_packet(int socket_fd, char * buffer, int bufsize);
+
 using namespace zeek::iosource::pktsrc;
 
 plugin::Zeek_PcapOverTcp::Plugin PcapOverTcpFoo;
@@ -279,7 +285,7 @@ zeek::iosource::PktSrc* PcapOverTcpSource::InstantiatePcapOverTcp(const std::str
 }
 
 
-int zpot_get_global_hdr(int socket_fd, pcap_file_header & global_hdr)
+static int  zpot_get_global_hdr(int socket_fd, pcap_file_header & global_hdr)
 {	
 	int bytes_received = recv(socket_fd, &global_hdr, sizeof(global_hdr), MSG_WAITALL);
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open bytes_received is %d", 
@@ -306,7 +312,7 @@ int zpot_get_global_hdr(int socket_fd, pcap_file_header & global_hdr)
 	return bytes_received;
 };
 
-int zpot_get_addr_and_port(const std::string& path, std::string &server_ip, int * port)
+static int  zpot_get_addr_and_port(const std::string& path, std::string &server_ip, int * port)
 {
 	// find the IP addr and port of server
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open path is %s", 
@@ -333,7 +339,7 @@ int zpot_get_addr_and_port(const std::string& path, std::string &server_ip, int 
 	return 0;
 }
 
-int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number)
+static int  zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number)
 {
 	// setup server_addr for connect
 	struct sockaddr_in server_addr;
