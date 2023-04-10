@@ -65,6 +65,12 @@ private:
 	int socket_fd;
 	struct pcap_pkthdr current_hdr;
 
+	int get_global_hdr(int socket_fd, pcap_file_header & global_hdr);
+	int get_addr_and_port(const std::string& path, std::string server_ip, int * port);
+	int connect_to_server(int socket_fd, std::string server_ip, int port_number);
+	int get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int bufsize);
+	int get_full_packet(int socket_fd, char * buffer, int bufsize);
+
 };
 
 }
