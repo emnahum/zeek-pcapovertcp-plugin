@@ -69,14 +69,14 @@ void PcapOverTcpSource::Open()
 	int port;
 
 	// get IP address and port to connect to
-	if (zpot_get_addr_and_port(props.path, server_ip, &port) < 1)
+	if (zpot_get_addr_and_port(props.path, server_ip, &port) < 0)
 	{
 		Error(errno ? strerror(errno) : "Invalid IP:PORT address format");
 		return;
 	}
 
 	// now try to connect to server
-	if (zpot_connect_to_server(socket_fd, server_ip, port) < 1)
+	if (zpot_connect_to_server(socket_fd, server_ip, port) < 0)
 	{
 		Error(errno ? strerror(errno) : "unable to connect");
 		close(socket_fd);
@@ -120,18 +120,6 @@ void PcapOverTcpSource::Close()
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Close Exit");
 }
 
-// stolen from libpcap/pcap-int.h.  Not exported by libpcap
-struct pcap_timeval {
-     bpf_int32 tv_sec;           /* seconds */
-     bpf_int32 tv_usec;          /* microseconds */
-};
-
-struct pcap_sf_pkthdr {
-     struct pcap_timeval ts;     /* time stamp */
-     bpf_u_int32 caplen;         /* length of portion present */
-     bpf_u_int32 len;            /* length of this packet (off wire) */
-};
-
 bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 {
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract Entry");
@@ -146,25 +134,18 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		// read the next packet off the socket
 		char   buffer[64*1024];
 		const u_char *data = (u_char *) buffer;
-		struct pcap_sf_pkthdr sf_pkthdr;
 		int bytes_received;
 	
 		// get the sf header first
-		do {
-                	bytes_received = recv(socket_fd, &sf_pkthdr, sizeof(sf_pkthdr), 
-				   MSG_WAITALL);
-                } while ((bytes_received == -1) && (errno == EINTR));
-  
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-				"PcapOverTcpSource::Extract header bytes_received is %d", 
-		 		static_cast<int>(bytes_received));
+		bytes_received = zpot_get_packet_header(socket_fd, current_hdr, sizeof(buffer));
+		// less than zero means error
 		if (bytes_received < 0) 
 		{
 			Error(errno ? strerror(errno) : "error reading socket");
 			return false;
 		}
 
-		// check for EOF
+		// check for EOF (bytes=0)
 		if (bytes_received == 0) 
 		{
 			// socket is out of data
@@ -173,34 +154,8 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			return false;
 		}
 
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract time is   %d", 
-				sf_pkthdr.ts.tv_sec);
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract utime is  %d", 
-				sf_pkthdr.ts.tv_usec);
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract len is    %d", 
-				sf_pkthdr.len);
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract caplen is %d", 
-				sf_pkthdr.caplen);
-
-		// copy over from sf header to packet header, which Zeek expects	
-		current_hdr.ts.tv_sec = sf_pkthdr.ts.tv_sec;
-		current_hdr.ts.tv_usec = sf_pkthdr.ts.tv_usec;
-		current_hdr.len = sf_pkthdr.len;
-		current_hdr.caplen = sf_pkthdr.caplen;
-
-		// check the header length isn't crazy
-		if (current_hdr.caplen > sizeof(buffer))
-		{
-			Error(errno ? strerror(errno) : "header length problem");
-			return false;
-		}
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract checked hdr len");
-
 		// now read the packet
-		bytes_received = recv(socket_fd, buffer, current_hdr.caplen, MSG_WAITALL);
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-				"PcapOverTcpSource::Extract buffer bytes_received is %d", 
-				static_cast<int>(bytes_received));
+		bytes_received = zpot_get_full_packet(socket_fd, buffer, sizeof(buffer));
 		if (bytes_received < 0) 
 		{
 			Error(errno ? strerror(errno) : "error reading socket");
@@ -312,7 +267,7 @@ static int  zpot_get_global_hdr(int socket_fd, pcap_file_header & global_hdr)
 	return bytes_received;
 };
 
-static int  zpot_get_addr_and_port(const std::string& path, std::string &server_ip, int * port)
+static int zpot_get_addr_and_port(const std::string& path, std::string &server_ip, int * port)
 {
 	// find the IP addr and port of server
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open path is %s", 
@@ -359,3 +314,88 @@ static int  zpot_connect_to_server(int socket_fd, std::string server_ip, int por
 	return 0;
 }
 
+
+// stolen from libpcap/pcap-int.h.  Not exported by libpcap
+struct pcap_timeval {
+     bpf_int32 tv_sec;           /* seconds */
+     bpf_int32 tv_usec;          /* microseconds */
+};
+
+struct pcap_sf_pkthdr {
+     struct pcap_timeval ts;     /* time stamp */
+     bpf_u_int32 caplen;         /* length of portion present */
+     bpf_u_int32 len;            /* length of this packet (off wire) */
+};
+
+static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int bufsize)
+{
+	int bytes_received;
+	struct pcap_sf_pkthdr sf_pkthdr;
+
+	do {
+		bytes_received = recv(socket_fd, &sf_pkthdr, sizeof(sf_pkthdr), MSG_WAITALL);
+	} while ((bytes_received == -1) && (errno == EINTR));
+
+	PLUGIN_DBG_LOG(PcapOverTcpFoo,
+			"PcapOverTcpSource::Extract header bytes_received is %d",
+			bytes_received);
+	if (bytes_received < 0)
+	{
+		return -1;
+	}
+
+	// check for EOF
+	if (bytes_received == 0)
+	{
+		return 0;
+	}
+
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract time is   %d",
+			sf_pkthdr.ts.tv_sec);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract utime is  %d",
+			sf_pkthdr.ts.tv_usec);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract len is    %d",
+			sf_pkthdr.len);
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract caplen is %d",
+			sf_pkthdr.caplen);
+
+	// copy over from sf header to packet header, which Zeek expects
+	current_hdr.ts.tv_sec = sf_pkthdr.ts.tv_sec;
+	current_hdr.ts.tv_usec = sf_pkthdr.ts.tv_usec;
+	current_hdr.len = sf_pkthdr.len;
+	current_hdr.caplen = sf_pkthdr.caplen;
+
+	// check the header length isn't crazy
+	if ((int) sf_pkthdr.caplen > bufsize)
+	{
+		return -1;
+	}
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract checked hdr len");
+	return current_hdr.caplen;
+}
+
+static int zpot_get_full_packet(int socket_fd, char * buffer, int bufsize)
+{
+	int bytes_received;
+
+	do {
+		bytes_received = recv(socket_fd, buffer, bufsize, MSG_WAITALL);
+	} while ((bytes_received == -1) && (errno == EINTR));
+
+	PLUGIN_DBG_LOG(PcapOverTcpFoo,
+			"PcapOverTcpSource::Extract buffer bytes_received is %d",
+			bytes_received);
+	if (bytes_received < 0)
+	{
+		return -1;
+	}
+
+	// EOF will probably be caught above, so probably don't need this,
+	// but just in case...
+	if (bytes_received == 0)
+	{
+		// socket is out of data
+		return 0;
+	}
+	return bytes_received;
+}
