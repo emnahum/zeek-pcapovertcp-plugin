@@ -15,11 +15,11 @@
 
 #include "pcapovertcp.bif.h"
 
-static int zpot_get_global_hdr(int socket_fd, pcap_file_header & global_hdr);
-static int zpot_get_addr_and_port(const std::string& path, std::string &server_ip, int * port);
 static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number);
+static int zpot_get_serverip_and_port(const std::string& path, std::string &server_ip, int * port);
+static int zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr);
 static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int bufsize);
-static int zpot_get_full_packet(int socket_fd, char * buffer, int bufsize);
+static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize);
 
 using namespace zeek::iosource::pktsrc;
 
@@ -27,11 +27,13 @@ plugin::Zeek_PcapOverTcp::Plugin PcapOverTcpFoo;
 
 PcapOverTcpSource::~PcapOverTcpSource()
 {
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource: Destructor Entry");
 	Close();
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource: Destructor Exit");
 }
 
 //
-//	Contstructor -- just sets up and instantiates the object.
+//	Constructor -- just sets up and instantiates the object.
 //
 //	We don't actually open the socket until Open() is called.
 //
@@ -69,7 +71,7 @@ void PcapOverTcpSource::Open()
 	int port;
 
 	// get IP address and port to connect to
-	if (zpot_get_addr_and_port(props.path, server_ip, &port) < 0)
+	if (zpot_get_serverip_and_port(props.path, server_ip, &port) < 0)
 	{
 		Error(errno ? strerror(errno) : "Invalid IP:PORT address format");
 		return;
@@ -86,7 +88,7 @@ void PcapOverTcpSource::Open()
 	// get the initial global header
 	pcap_file_header global_hdr;
 	
-	ssize_t bytes_received = zpot_get_global_hdr(socket_fd, global_hdr);
+	ssize_t bytes_received = zpot_get_global_header(socket_fd, global_hdr);
 	if (bytes_received != sizeof(global_hdr))
 	{
 		Error(errno ? strerror(errno) : "error reading socket");
@@ -136,8 +138,9 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		const u_char *data = (u_char *) buffer;
 		int bytes_received;
 	
-		// get the sf header first
-		bytes_received = zpot_get_packet_header(socket_fd, current_hdr, sizeof(buffer));
+		// get the packet header first
+		bytes_received = zpot_get_packet_header(socket_fd, current_hdr, 
+				sizeof(buffer));
 		// less than zero means error
 		if (bytes_received < 0) 
 		{
@@ -154,8 +157,8 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			return false;
 		}
 
-		// now read the packet
-		bytes_received = zpot_get_full_packet(socket_fd, buffer, sizeof(buffer));
+		// now read the full packet
+		bytes_received = zpot_get_packet_body(socket_fd, buffer, current_hdr.caplen);
 		if (bytes_received < 0) 
 		{
 			Error(errno ? strerror(errno) : "error reading socket");
@@ -206,7 +209,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 
 void PcapOverTcpSource::DoneWithPacket()
 {
-		// Nothing to do.
+	// Nothing to do.
 }
 
 bool PcapOverTcpSource::SetFilter(int index)
@@ -239,38 +242,46 @@ zeek::iosource::PktSrc* PcapOverTcpSource::InstantiatePcapOverTcp(const std::str
 	return new PcapOverTcpSource(path, is_live);
 }
 
-
-static int  zpot_get_global_hdr(int socket_fd, pcap_file_header & global_hdr)
+// get the global header, return number of bytes received.  Less than that is an error.
+static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr)
 {	
-	int bytes_received = recv(socket_fd, &global_hdr, sizeof(global_hdr), MSG_WAITALL);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open bytes_received is %d", 
+	int bytes_received;
+
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: entry"); 
+	do {
+		bytes_received = recv(socket_fd, &global_hdr, sizeof(global_hdr), 
+				MSG_WAITALL);
+	} while ((bytes_received == -1) && (errno == EINTR));
+
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: bytes_received is %d", 
 			bytes_received);
 	if (bytes_received < (int) sizeof(global_hdr)) 
 	{
 		return -1;
 	}
 
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open magic is %x",         
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: magic is %x",         
 			global_hdr.magic);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open version_major is %d", 
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: version_major is %d", 
 			global_hdr.version_major);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open version_minor is %d", 
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: version_minor is %d", 
 			global_hdr.version_minor);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open thiszone is %d",      
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: thiszone is %d",      
 			global_hdr.thiszone);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open sigfigs is %d",       
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: sigfigs is %d",       
 			global_hdr.sigfigs);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open snaplen is %d",       
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: snaplen is %d",       
 			global_hdr.snaplen);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open linktype is %d",      
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: linktype is %d",      
 			global_hdr.linktype);
 	return bytes_received;
 };
 
-static int zpot_get_addr_and_port(const std::string& path, std::string &server_ip, int * port)
+//	get the server IP address and port number.  -1 means error, 0 OK
+static int zpot_get_serverip_and_port(const std::string& path, std::string &server_ip, int * port)
 {
 	// find the IP addr and port of server
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open path is %s", 
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_serverip_and_port: path is %s", 
 			path.c_str());
 	size_t colon_pos = path.find(':');
 	if (colon_pos == std::string::npos) 
@@ -281,21 +292,23 @@ static int zpot_get_addr_and_port(const std::string& path, std::string &server_i
 	// Extract the IP address and port number as separate strings
 	server_ip = path.substr(0, colon_pos);
 	std::string port_str = path.substr(colon_pos + 1);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open server_ip is %s", 
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_serverip_and_port: server_ip is %s", 
 			server_ip.c_str());
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open port_str is %s",  
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_serverip_and_port: port_str is %s",  
 			port_str.c_str());
 
 	// Convert the port number string to an integer
 	int port_number = std::stoi(port_str);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open port_number is %d", 
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_serverip_and_port: port_number is %d", 
 			port_number );
 	*port = port_number;
 	return 0;
 }
 
-static int  zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number)
+//	connect to the server.  -1 is an error, 0 is OK
+static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number)
 {
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server: Connecting... ");
 	// setup server_addr for connect
 	struct sockaddr_in server_addr;
 	memset(&server_addr, 0, sizeof(server_addr));
@@ -309,11 +322,10 @@ static int  zpot_connect_to_server(int socket_fd, std::string server_ip, int por
 	{
 		return -1;
 	}
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open Connected ");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server: Connected ");
 
 	return 0;
 }
-
 
 // stolen from libpcap/pcap-int.h.  Not exported by libpcap
 struct pcap_timeval {
@@ -327,6 +339,10 @@ struct pcap_sf_pkthdr {
      bpf_u_int32 len;            /* length of this packet (off wire) */
 };
 
+// 	get the pcap_pkthdr for the packet.  Return bytes_received:
+// 	< 0 : error
+// 	= 0 : socket is closed, EOF
+// 	> 0 : bytes returned
 static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int bufsize)
 {
 	int bytes_received;
@@ -336,8 +352,7 @@ static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int 
 		bytes_received = recv(socket_fd, &sf_pkthdr, sizeof(sf_pkthdr), MSG_WAITALL);
 	} while ((bytes_received == -1) && (errno == EINTR));
 
-	PLUGIN_DBG_LOG(PcapOverTcpFoo,
-			"PcapOverTcpSource::Extract header bytes_received is %d",
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: bytes_received is %d",
 			bytes_received);
 	if (bytes_received < 0)
 	{
@@ -350,13 +365,13 @@ static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int 
 		return 0;
 	}
 
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract time is   %d",
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: time is   %d",
 			sf_pkthdr.ts.tv_sec);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract utime is  %d",
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: utime is  %d",
 			sf_pkthdr.ts.tv_usec);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract len is    %d",
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: len is    %d",
 			sf_pkthdr.len);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract caplen is %d",
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: caplen is %d",
 			sf_pkthdr.caplen);
 
 	// copy over from sf header to packet header, which Zeek expects
@@ -370,11 +385,15 @@ static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int 
 	{
 		return -1;
 	}
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract checked hdr len");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: checked hdr len");
 	return current_hdr.caplen;
 }
 
-static int zpot_get_full_packet(int socket_fd, char * buffer, int bufsize)
+// 	get the full packet from the socket. Return bytes_received:
+// 	< 0 : error
+// 	  0 : socket is closed, EOF
+// 	> 0 : bytes returned
+static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize)
 {
 	int bytes_received;
 
@@ -382,8 +401,7 @@ static int zpot_get_full_packet(int socket_fd, char * buffer, int bufsize)
 		bytes_received = recv(socket_fd, buffer, bufsize, MSG_WAITALL);
 	} while ((bytes_received == -1) && (errno == EINTR));
 
-	PLUGIN_DBG_LOG(PcapOverTcpFoo,
-			"PcapOverTcpSource::Extract buffer bytes_received is %d",
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_body: bytes_received is %d",
 			bytes_received);
 	if (bytes_received < 0)
 	{
