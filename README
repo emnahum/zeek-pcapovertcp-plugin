@@ -27,9 +27,9 @@ If everything built and installed correctly, you should see this:
 
 ## Usage
 
-Once installed, you can use PcapOverTcp interfaces/ports by prefixing them with `pcapovertcp::` on the command line. For example, to use PcapOverTcp to use local socket with port 57012:
+Once installed, you can use PcapOverTcp interfaces/ports by prefixing them with `pcapovertcp::` on the command line. For example, to use PcapOverTcp to use a local socket with port 57012:
 
-    # zeek -i -i pcapovertcp::127.0.0.1:57012
+    # zeek -i pcapovertcp::127.0.0.1:57012
 
 ### Permissions
 
@@ -67,7 +67,7 @@ Note that the PcapOverTcp plugin does not yet support multiple workers consuming
 
 ## Debugging the Plugin
 
-To debug the plugin, configure with --enable-debug.  Then when you run zeek, add '-B plugin-Zeek-PcapOverTcp'
+To debug the plugin, configure with --enable-debug, as well as Zeek itself.  Then when you run Zeek, add '-B plugin-Zeek-PcapOverTcp'
 
 ## Advanced Configuration
 
