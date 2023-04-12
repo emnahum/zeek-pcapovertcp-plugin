@@ -214,12 +214,14 @@ void PcapOverTcpSource::DoneWithPacket()
 
 bool PcapOverTcpSource::SetFilter(int index)
 {
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::SetFilter Open");
 	current_filter = index;
 	return true;
 }
 
 bool PcapOverTcpSource::PrecompileFilter(int index, const std::string& filter)
 {
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Precompile Open");
 	return PktSrc::PrecompileBPFFilter(index, filter);
 }
 
@@ -239,6 +241,7 @@ void PcapOverTcpSource::Statistics(Stats* s)
 
 zeek::iosource::PktSrc* PcapOverTcpSource::InstantiatePcapOverTcp(const std::string& path, bool is_live)
 {
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Instantiate Entry");
 	return new PcapOverTcpSource(path, is_live);
 }
 
@@ -255,8 +258,15 @@ static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr)
 
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: bytes_received is %d", 
 			bytes_received);
+	if (bytes_received < -1)
+	{
+		return -1;
+	}
+	
 	if (bytes_received < (int) sizeof(global_hdr)) 
 	{
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: ONLY got %x bytes",
+				bytes_received);
 		return -1;
 	}
 
@@ -275,7 +285,7 @@ static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr)
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: linktype is %d",      
 			global_hdr.linktype);
 	return bytes_received;
-};
+}
 
 //	get the server IP address and port number.  -1 means error, 0 OK
 static int zpot_get_serverip_and_port(const std::string& path, std::string &server_ip, int * port)
@@ -365,6 +375,13 @@ static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int 
 		return 0;
 	}
 
+	if (bytes_received < (int) sizeof(sf_pkthdr))
+	{
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: ONLY got %x bytes",
+				bytes_received);
+		return -1;
+	}
+
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: time is   %d",
 			sf_pkthdr.ts.tv_sec);
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: utime is  %d",
@@ -414,6 +431,11 @@ static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize)
 	{
 		// socket is out of data
 		return 0;
+	}
+	if (bytes_received != bufsize)
+	{
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_body: ONLY %d bytes_received",
+				bytes_received);
 	}
 	return bytes_received;
 }
