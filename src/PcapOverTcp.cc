@@ -377,11 +377,30 @@ static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port
 	server_addr.sin_addr.s_addr = inet_addr(server_ip.c_str());
 	server_addr.sin_port = htons(port_number);
 
+	int delay = 1;
+	int rv;
 	// Connect to the server
-	int rv = connect(socket_fd, reinterpret_cast<sockaddr*>(&server_addr), 
+	do 
+	{
+		// attempt to connect
+		rv = connect(socket_fd, reinterpret_cast<sockaddr*>(&server_addr), 
 			sizeof(server_addr));
+		// if failure is ECONNREFUSED...
+		if ((rv == -1) && (errno == ECONNREFUSED))
+		{
+			// sleep, then try again
+			PLUGIN_DBG_LOG(PcapOverTcpFoo, 
+					"zpot_connect_to_server: ECONNREFUSED %d",
+					delay);
+			sleep(delay);
+			delay += delay;
+		}
+	} while ((delay < 16) && (rv == -1));
+
 	if ( rv < 0 ) 
 	{
+		// didn't make it
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server: failed ");
 		return -1;
 	}
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server: Connected ");
