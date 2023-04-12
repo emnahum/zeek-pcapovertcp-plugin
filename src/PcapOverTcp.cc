@@ -28,9 +28,9 @@ plugin::Zeek_PcapOverTcp::Plugin PcapOverTcpFoo;
 
 PcapOverTcpSource::~PcapOverTcpSource()
 {
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource: Destructor Entry");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Destructor: Entry");
 	Close();
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource: Destructor Exit");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Destructor: Exit");
 }
 
 //
@@ -40,7 +40,7 @@ PcapOverTcpSource::~PcapOverTcpSource()
 //
 PcapOverTcpSource::PcapOverTcpSource(const std::string& path, bool is_live)
 {
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource: Constructor Entry");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Constructor: Entry");
 	// does PCAP over TCP support live or non-live traffic?j
 	if ( ! is_live )
 		Error("PcapOverTcp source does not support offline input");
@@ -49,15 +49,16 @@ PcapOverTcpSource::PcapOverTcpSource(const std::string& path, bool is_live)
 	props.path = path;
 	props.is_live = is_live;
 
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource: Constructor Exit");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Constructor: Exit");
 }
 
+// 	open the socket as a packet source
 void PcapOverTcpSource::Open()
 {
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open Entry");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Open: Entry");
 
 	// create socket
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open creating socket");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Open: creating socket");
 	socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if ( socket_fd < 0 )
 	{
@@ -113,12 +114,12 @@ void PcapOverTcpSource::Open()
 	num_discarded = 0;
 
 	Opened(props);
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open Exit");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Open: Exit");
 }
 
 void PcapOverTcpSource::Close()
 {
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Close Entry");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Close: Entry");
 	if ( ! socket_fd )
 		return;
 
@@ -126,15 +127,15 @@ void PcapOverTcpSource::Close()
 	socket_fd = 0;
 
 	Closed();
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Close Exit");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Close: Exit");
 }
 
 bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 {
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract Entry");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "ExtractNext: Entry");
 	if ( ! socket_fd ) 
 	{
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract socket is closed");
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "ExtractNext: socket is closed");
 		return false;
 	}
 
@@ -159,7 +160,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		if (bytes_received == 0) 
 		{
 			// socket is out of data
-			PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract OOD");
+			PLUGIN_DBG_LOG(PcapOverTcpFoo, "ExtractNext: OOD");
 			close(socket_fd);
 			return false;
 		}
@@ -177,13 +178,13 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		if (bytes_received == 0) 
 		{
 			// socket is out of data
-			PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract OOD2");
+			PLUGIN_DBG_LOG(PcapOverTcpFoo, "ExtractNext: OOD2");
 			close(socket_fd);
 			return false;
 		}
 
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-				"PcapOverTcpSource::Extract caplen is same as recv len (%d)", 
+				"ExtractNext: caplen is same as recv len (%d)", 
 				current_hdr.caplen);
 		
 		// apply the BFF Filter
@@ -206,7 +207,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		// update stats
 		stats.received++;
 		stats.bytes_received += current_hdr.len;
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Extract Exit");
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "ExtractNext: Exit");
 		return true;
 	}
 
@@ -221,21 +222,21 @@ void PcapOverTcpSource::DoneWithPacket()
 
 bool PcapOverTcpSource::SetFilter(int index)
 {
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::SetFilter Open");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "SetFilter: Open");
 	current_filter = index;
 	return true;
 }
 
 bool PcapOverTcpSource::PrecompileFilter(int index, const std::string& filter)
 {
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Precompile Open");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Precompile: Open");
 	return PktSrc::PrecompileBPFFilter(index, filter);
 }
 
 // get the statistics for the packet source
 void PcapOverTcpSource::Statistics(Stats* s)
 {
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Stats Open");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Stats: Open");
 	if ( ! socket_fd )
 	{
 		s->received = s->bytes_received = s->link = s->dropped = 0;
@@ -243,12 +244,12 @@ void PcapOverTcpSource::Statistics(Stats* s)
 	}
 
 	memcpy(s, &stats, sizeof(Stats));
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Stats Exit");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Stats: Exit");
 }
 
 zeek::iosource::PktSrc* PcapOverTcpSource::InstantiatePcapOverTcp(const std::string& path, bool is_live)
 {
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Instantiate Entry");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "Instantiate: Entry");
 	return new PcapOverTcpSource(path, is_live);
 }
 
@@ -377,7 +378,8 @@ static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port
 	server_addr.sin_port = htons(port_number);
 
 	// Connect to the server
-	int rv = connect(socket_fd, reinterpret_cast<sockaddr*>(&server_addr), sizeof(server_addr));
+	int rv = connect(socket_fd, reinterpret_cast<sockaddr*>(&server_addr), 
+			sizeof(server_addr));
 	if ( rv < 0 ) 
 	{
 		return -1;
