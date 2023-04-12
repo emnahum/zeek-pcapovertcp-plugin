@@ -15,6 +15,7 @@
 
 #include "pcapovertcp.bif.h"
 
+static int zpot_set_socket_buffer_size(int socket_fd);
 static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number);
 static int zpot_get_serverip_and_port(const std::string& path, std::string &server_ip, int * port);
 static int zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr);
@@ -54,7 +55,7 @@ PcapOverTcpSource::PcapOverTcpSource(const std::string& path, bool is_live)
 void PcapOverTcpSource::Open()
 {
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open Entry");
-	
+
 	// create socket
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Open creating socket");
 	socket_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -64,9 +65,15 @@ void PcapOverTcpSource::Open()
 		return;
 	}
 
-	// set the socket params?
-	// are we a client or a server?  Just a client for now.
 
+	// set the socket params
+	int rv = zpot_set_socket_buffer_size(socket_fd);
+	if (rv < 0)
+	{
+		Error(errno ? strerror(errno) : "warning: unable to set socket opts");
+	}
+
+	// are we a client or a server?  Just a client for now.
 	std::string server_ip;
 	int port;
 
@@ -243,6 +250,49 @@ zeek::iosource::PktSrc* PcapOverTcpSource::InstantiatePcapOverTcp(const std::str
 {
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "PcapOverTcpSource::Instantiate Entry");
 	return new PcapOverTcpSource(path, is_live);
+}
+
+// set the socket buffer size
+static int zpot_set_socket_buffer_size(int socket_fd)
+{
+        // get options
+        int request_buffer_size = zeek::BifConst::PcapOverTcp::buffer_size;
+        int current_buffer_size;
+	unsigned int option_len = sizeof(current_buffer_size);
+        int rv;
+
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_set_socket_buffer_size: entry");
+        // get the current socket params
+        rv = getsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, &current_buffer_size, &option_len);
+                        //static_cast<socklen_t>(sizeof(current_buffer_size)));
+        if (rv < 0)
+        {
+                PLUGIN_DBG_LOG(PcapOverTcpFoo,
+                        "zpot_set_socket_buffer_size: error retrieving buffer");
+                return -1;
+        }
+
+        // is request more than current?
+        if (request_buffer_size < current_buffer_size)
+        {
+                PLUGIN_DBG_LOG(PcapOverTcpFoo,
+                        "zpot_set_socket_buffer_size: request %d is smaller than current %d",
+                        request_buffer_size, current_buffer_size);
+                return -1;
+        }
+
+        // set the current socket params
+        rv = setsockopt(socket_fd, SOL_SOCKET, SO_RCVBUF, &request_buffer_size,
+                        sizeof(request_buffer_size));
+        if (rv < 0)
+        {
+                PLUGIN_DBG_LOG(PcapOverTcpFoo,
+                        "zpot_set_socket_buffer_size: error setting buffer size");
+                return -1;
+        }
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_set_socket_buffer_size: set to %d",
+			request_buffer_size);
+        return 0;
 }
 
 // get the global header, return number of bytes received.  Less than that is an error.
