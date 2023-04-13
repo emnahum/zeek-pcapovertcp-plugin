@@ -31,12 +31,6 @@ Once installed, you can use PcapOverTcp interfaces/ports by prefixing them with 
 
     # zeek -i pcapovertcp::127.0.0.1:57012
 
-### Permissions
-
-To use PcapOverTcp, running Zeek without root privileges, the Zeek processes need the CAP_NET_RAW capability. You can set it with the following command (on each sensor, after `zeekctl install`):
-
-    # setcap cap_net_raw+eip <path_to_zeek>/bin/zeek
-
 ## Usage with `zeekctl`
 
 To use the PcapOverTcp plugin with `zeekctl`, the `custom` load balance method can be utilized. The following shows an exemplary configuration:
@@ -79,4 +73,4 @@ While the plugin aims at providing a "plug and play" user experience, it exposes
 
 ## Acknowledgements
 
-Thanks to Justin Azoff and Tim Wojtulewicz for help in debugging this.
+Thanks to Justin Azoff, Tim Wojtulewicz, and Christian Kreibich for help in debugging this.
