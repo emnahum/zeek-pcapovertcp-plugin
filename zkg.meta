@@ -1,6 +1,6 @@
 [package]
-description = This plugin provides native PCAP over TCP support for Zeek.
-tags = zeek plugin, zeekctl plugin, packet source, pcapovertcp
+description = Provides PCAP over TCP support for Zeek.
+tags = zeek plugin, zeekctl plugin, packet source, pcapovertcp, pcap
 script_dir = scripts/pcapovertcp
 plugin_dir = build/Zeek_PcapOverTcp.tgz
 build_command = ./configure && make
