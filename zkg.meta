@@ -4,7 +4,6 @@ tags = zeek plugin, zeekctl plugin, packet source, pcapovertcp, pcap
 script_dir = scripts/pcapovertcp
 plugin_dir = build/Zeek_PcapOverTcp.tgz
 build_command = ./configure && make
-test_command = cd tests && btest -d
 depends =
   zkg >=2.0
   zeek >=4.0.0
