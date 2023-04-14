@@ -1,9 +1,5 @@
 
-Where are extra conn entries coming from?
-
 Do they use libkqueue?
 
 Things to try:
-  -- setsockopts
-  -- parameters (socket size)
   -- act as server (instead of client)
