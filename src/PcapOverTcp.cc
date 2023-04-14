@@ -19,8 +19,8 @@ static int zpot_set_socket_buffer_size(int socket_fd);
 static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number);
 static int zpot_get_serverip_and_port(const std::string& path, std::string &server_ip, int * port);
 static int zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr);
-static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int bufsize);
-static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize);
+static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr);
+static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize, int bytes_expected);
 
 using namespace zeek::iosource::pktsrc;
 
@@ -147,8 +147,8 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		int bytes_received;
 	
 		// get the packet header first
-		bytes_received = zpot_get_packet_header(socket_fd, current_hdr, 
-				sizeof(buffer));
+		bytes_received = zpot_get_packet_header(socket_fd, current_hdr); 
+				
 		// less than zero means error
 		if (bytes_received < 0) 
 		{
@@ -165,8 +165,17 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			return false;
 		}
 
+		// check the header length isn't crazy
+		if (current_hdr.caplen > sizeof(buffer))
+		{
+			PLUGIN_DBG_LOG(PcapOverTcpFoo, "ExtractNext: Crazy");
+			close(socket_fd);
+			return false;
+		}
+
 		// now read the full packet
-		bytes_received = zpot_get_packet_body(socket_fd, buffer, current_hdr.caplen);
+		bytes_received = zpot_get_packet_body(socket_fd, buffer, sizeof(buffer), 
+				current_hdr.caplen);
 		if (bytes_received < 0) 
 		{
 			Error(errno ? strerror(errno) : "error reading socket");
@@ -183,10 +192,6 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			return false;
 		}
 
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-				"ExtractNext: caplen is same as recv len (%d)", 
-				current_hdr.caplen);
-		
 		// apply the BFF Filter
 		if ( !ApplyBPFFilter(current_filter, &current_hdr, data) )
 		{
@@ -296,7 +301,11 @@ static int zpot_set_socket_buffer_size(int socket_fd)
         return 0;
 }
 
-// get the global header, return number of bytes received.  Less than that is an error.
+// 	get the global header.  Return bytes_received:
+// 	< 0 : error
+// 	= 0 : socket is closed, EOF
+// 	< sizeof(sf_pkthdr) : error
+// 	= sizeof(sf_pkthdr) : OK
 static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr)
 {	
 	int bytes_received;
@@ -423,8 +432,9 @@ struct pcap_sf_pkthdr {
 // 	get the pcap_pkthdr for the packet.  Return bytes_received:
 // 	< 0 : error
 // 	= 0 : socket is closed, EOF
-// 	> 0 : bytes returned
-static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int bufsize)
+// 	!= sizeof(sf_packethdr) : error
+// 	= sizeof(sf_packethdr) : OK
+static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr)
 {
 	int bytes_received;
 	struct pcap_sf_pkthdr sf_pkthdr;
@@ -446,7 +456,7 @@ static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int 
 		return 0;
 	}
 
-	if (bytes_received < (int) sizeof(sf_pkthdr))
+	if (bytes_received != sizeof(sf_pkthdr))
 	{
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: ONLY got %x bytes",
 				bytes_received);
@@ -468,25 +478,30 @@ static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int 
 	current_hdr.len = sf_pkthdr.len;
 	current_hdr.caplen = sf_pkthdr.caplen;
 
-	// check the header length isn't crazy
-	if ((int) sf_pkthdr.caplen > bufsize)
-	{
-		return -1;
-	}
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: checked hdr len");
-	return current_hdr.caplen;
+	return bytes_received;
 }
 
 // 	get the full packet from the socket. Return bytes_received:
 // 	< 0 : error
 // 	  0 : socket is closed, EOF
-// 	> 0 : bytes returned
-static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize)
+// 	< bytes_expected : issue warning (not fatal, should it be?)
+// 	= bytes_expected : OK
+static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize, int bytes_expected)
 {
 	int bytes_received;
 
+	// check for overrun of buffer
+	if (bufsize < bytes_expected)
+	{
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
+		"zpot_get_packet_body: bufsize %d is smaller than bytes_expected is %d",
+				bufsize, bytes_expected);
+		return -1;
+	}
+
 	do {
-		bytes_received = recv(socket_fd, buffer, bufsize, MSG_WAITALL);
+		bytes_received = recv(socket_fd, buffer, bytes_expected, MSG_WAITALL);
 	} while ((bytes_received == -1) && (errno == EINTR));
 
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_body: bytes_received is %d",
@@ -503,7 +518,7 @@ static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize)
 		// socket is out of data
 		return 0;
 	}
-	if (bytes_received != bufsize)
+	if (bytes_received != bytes_expected)
 	{
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_body: ONLY %d bytes_received",
 				bytes_received);
