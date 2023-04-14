@@ -6,5 +6,5 @@ module PcapOverTcp;
 
 export {
 	## Size of the socket-buffer.
-	const buffer_size = 128 * 1024 * 1024 &redef;
+	const buffer_size = 32 * 1024 * 1024 &redef;
 }
