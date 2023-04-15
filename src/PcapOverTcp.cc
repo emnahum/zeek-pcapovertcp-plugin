@@ -322,7 +322,8 @@ static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr)
 	{
 		return -1;
 	}
-	
+
+	// should have gotten a full header	
 	if (bytes_received < (int) sizeof(global_hdr)) 
 	{
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: ONLY got %x bytes",
@@ -389,8 +390,7 @@ static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port
 	int delay = 1;
 	int rv;
 	// Connect to the server
-	do 
-	{
+	do {
 		// attempt to connect
 		rv = connect(socket_fd, reinterpret_cast<sockaddr*>(&server_addr), 
 			sizeof(server_addr));
@@ -409,7 +409,7 @@ static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port
 	if ( rv < 0 ) 
 	{
 		// didn't make it
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server: failed ");
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server: connect failed ");
 		return -1;
 	}
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server: Connected ");
@@ -456,6 +456,7 @@ static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr)
 		return 0;
 	}
 
+	// should have received the full header
 	if (bytes_received != sizeof(sf_pkthdr))
 	{
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: ONLY got %x bytes",
@@ -495,7 +496,7 @@ static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize, int b
 	if (bufsize < bytes_expected)
 	{
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-		"zpot_get_packet_body: bufsize %d is smaller than bytes_expected is %d",
+		"zpot_get_packet_body: bufsize %d is smaller than bytes_expected %d",
 				bufsize, bytes_expected);
 		return -1;
 	}
@@ -518,6 +519,8 @@ static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize, int b
 		// socket is out of data
 		return 0;
 	}
+
+	// check that we got what we expected.  Warning or Error?
 	if (bytes_received != bytes_expected)
 	{
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_body: ONLY %d bytes_received",
