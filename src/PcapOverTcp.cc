@@ -333,6 +333,18 @@ static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr)
 
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: magic is %x",         
 			global_hdr.magic);
+	if (global_hdr.magic == 0xd4c3b2a1)
+	{
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: big endian PCAPs not yet supported");
+		return -1;
+	}
+	else if (global_hdr.magic != 0xa1b2c3d4)
+	{
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: magic number %d unrecognized",
+			global_hdr.magic);
+		return -1;
+	}
+
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: version_major is %d", 
 			global_hdr.version_major);
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: version_minor is %d", 
