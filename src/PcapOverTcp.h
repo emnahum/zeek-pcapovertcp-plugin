@@ -64,6 +64,7 @@ private:
 
 	int socket_fd;
 	struct pcap_pkthdr current_hdr;
+	int swapped;
 
 };
 
