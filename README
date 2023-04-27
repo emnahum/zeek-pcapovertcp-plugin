@@ -36,7 +36,7 @@ Once installed, you can use PcapOverTcp interfaces/ports by prefixing them with 
 
 ## Usage with `zeekctl`
 
-You can use the PcapOverTcp plugin with `zeekctl`. The following shows an exemplary configuration:
+You can use the PcapOverTcp plugin with `zeekctl`. The following shows a sample configuration:
 
     [manager]
     type=manager
@@ -61,7 +61,7 @@ You can use the PcapOverTcp plugin with `zeekctl`. The following shows an exempl
     pcapovertcp_buffer_size=128*1024*1024
 
 
-Note that the PcapOverTcp plugin does not yet support multiple workers consuming the *same* stream.
+Note that workers must consume different streams (different IP, Port combinations). The PcapOverTcp plugin does not yet support multiple workers consuming the *same* stream.
 
 ## Debugging the Plugin
 
@@ -77,4 +77,4 @@ While the plugin aims at providing a "plug and play" user experience, it exposes
 
 ## Acknowledgements
 
-Thanks to Justin Azoff, Tim Wojtulewicz, and Christian Kreibich for help in debugging this.
+Thanks to Justin Azoff, Tim Wojtulewicz, Christian Kreibich, and Erik Hjelmvik for their comments and suggestions.
