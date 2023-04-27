@@ -65,7 +65,7 @@ Note that workers must consume different streams (different IP, Port combination
 
 ## Debugging the Plugin
 
-To debug the plugin, configure with --enable-debug, as well as Zeek itself.  Then when you run Zeek, add '-B plugin-Zeek-PcapOverTcp'
+To debug the plugin, configure with `--enable-debug`, as well as Zeek itself.  Then when you run Zeek, add `-B plugin-Zeek-PcapOverTcp` to the command line to enable debugging.  The resulting `debug.log` should show debug comments.
 
 ## Advanced Configuration
 
