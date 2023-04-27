@@ -18,8 +18,8 @@
 static int zpot_set_socket_buffer_size(int socket_fd);
 static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number);
 static int zpot_get_serverip_and_port(const std::string& path, std::string &server_ip, int * port);
-static int zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr, int & swapped);
-static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int swapped);
+static int zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr, bool & swapped);
+static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, bool swapped);
 static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize, int bytes_expected);
 
 using namespace zeek::iosource::pktsrc;
@@ -317,7 +317,7 @@ static int zpot_set_socket_buffer_size(int socket_fd)
 // 	= 0 : socket is closed, EOF
 // 	< sizeof(sf_pkthdr) : error
 // 	= sizeof(sf_pkthdr) : OK
-static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr, int & swapped)
+static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr, bool & swapped)
 {	
 	int bytes_received;
 
@@ -342,22 +342,22 @@ static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr,
 		return -1;
 	}
 
-	// check if pcap file has swap issues
+	// check if we support the pcap file type, or have swap issues 
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: magic is %x",         
 			global_hdr.magic);
 	switch (global_hdr.magic) {
 	case 0xa1b2c3d4:
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: no endian swapping");
-		swapped = 0;
+		swapped = false;
 		break;
 
 	case 0xd4c3b2a1:
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: endian swapping enabled");
-		swapped = 1;
+		swapped = true;
 		break;
 
 	default:
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: magic number %d unrecognized",
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: magic number %d not supported",
 			global_hdr.magic);
 		return -1;
 	}
@@ -367,10 +367,10 @@ static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr,
 	{
 		global_hdr.version_major = SWAPSHORT(global_hdr.version_major);
 		global_hdr.version_minor = SWAPSHORT(global_hdr.version_minor);
-		global_hdr.thiszone = SWAPLONG(global_hdr.thiszone);
-		global_hdr.sigfigs = SWAPLONG(global_hdr.sigfigs);
-		global_hdr.snaplen = SWAPLONG(global_hdr.snaplen);
-		global_hdr.linktype = SWAPLONG(global_hdr.linktype);
+		global_hdr.thiszone      = SWAPLONG(global_hdr.thiszone);
+		global_hdr.sigfigs       = SWAPLONG(global_hdr.sigfigs);
+		global_hdr.snaplen       = SWAPLONG(global_hdr.snaplen);
+		global_hdr.linktype      = SWAPLONG(global_hdr.linktype);
 	}
 
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_global_hdr: version_major is %d", 
@@ -474,7 +474,7 @@ struct pcap_sf_pkthdr {
 // 	= 0 : socket is closed, EOF
 // 	!= sizeof(sf_packethdr) : error
 // 	= sizeof(sf_packethdr) : OK
-static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, int swapped)
+static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, bool swapped)
 {
 	int bytes_received;
 	struct pcap_sf_pkthdr sf_pkthdr;
