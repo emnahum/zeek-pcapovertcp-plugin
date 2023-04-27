@@ -38,6 +38,7 @@ Once installed, you can use PcapOverTcp interfaces/ports by prefixing them with 
 
 You can use the PcapOverTcp plugin with `zeekctl`. The following shows a sample configuration:
 
+```
     [manager]
     type=manager
     host=localhost
@@ -59,7 +60,7 @@ You can use the PcapOverTcp plugin with `zeekctl`. The following shows a sample 
     interface=pcapovertcp::1.2.3.5:57012
     # Optional parameters for per node configuration:
     pcapovertcp_buffer_size=128*1024*1024
-
+```
 
 Note that workers must consume different streams (different IP, Port combinations). The PcapOverTcp plugin does not yet support multiple workers consuming the *same* stream.
 
