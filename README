@@ -36,8 +36,9 @@ Once installed, you can use PcapOverTcp interfaces/ports by prefixing them with 
 
 ## Usage with `zeekctl`
 
-To use the PcapOverTcp plugin with `zeekctl`, the `custom` load balance method can be utilized. The following shows an exemplary configuration:
+You can use the PcapOverTcp plugin with `zeekctl`. The following shows an exemplary configuration:
 
+'''
     [manager]
     type=manager
     host=localhost
@@ -59,8 +60,9 @@ To use the PcapOverTcp plugin with `zeekctl`, the `custom` load balance method c
     interface=pcapovertcp::1.2.3.5:57012
     # Optional parameters for per node configuration:
     pcapovertcp_buffer_size=128*1024*1024
+'''
 
-Note that the PcapOverTcp plugin does not yet support multiple workers consuming the same stream.
+Note that the PcapOverTcp plugin does not yet support multiple workers consuming the *same* stream.
 
 ## Debugging the Plugin
 
