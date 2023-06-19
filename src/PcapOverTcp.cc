@@ -435,12 +435,12 @@ static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port
 		rv = connect(socket_fd, reinterpret_cast<sockaddr*>(&server_addr), 
 			sizeof(server_addr));
 		// if failure is ECONNREFUSED...
-		if ((rv == -1) && (errno == ECONNREFUSED))
+		if (rv == -1) 
 		{
 			// sleep, then try again
 			PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-					"zpot_connect_to_server: ECONNREFUSED %d",
-					delay);
+					"zpot_connect_to_server: error %d (%s)",
+					delay, strerror(errno));
 			sleep(delay);
 			delay += delay;
 		}
