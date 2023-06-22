@@ -19,6 +19,6 @@ zeek::plugin::Configuration Plugin::Configure()
 	config.description = "Packet acquisition via PCAP over TCP";
 	config.version.major = 1;
 	config.version.minor = 0;
-	config.version.patch = 7;
+	config.version.patch = 8;
 	return config;
 	}

@@ -18,7 +18,7 @@
 static int zpot_set_socket_buffer_size(int socket_fd);
 static int zpot_get_server_name_and_port(const std::string & path, std::string &server_name, int * port);
 static int zpot_resolve_server_name(std::string server_name, std::string &server_ip);
-static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number);
+static int zpot_connect_to_server_ip(int socket_fd, std::string server_ip, int port_number);
 static int zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr, bool & swapped);
 static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, bool swapped);
 static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize, int bytes_expected);
@@ -82,7 +82,7 @@ void PcapOverTcpSource::Open()
 	// get IP address and port to connect to
 	if (zpot_get_server_name_and_port(props.path, server_name, &port) < 0)
 	{
-		Error(errno ? strerror(errno) : "Invalid IP:PORT address format");
+		Error(errno ? strerror(errno) : "Invalid DNSNAME:PORT address format");
 		return;
 	}
 
@@ -98,7 +98,7 @@ void PcapOverTcpSource::Open()
 	}
 
 	// now try to connect to server
-	if (zpot_connect_to_server(socket_fd, server_ip, port) < 0)
+	if (zpot_connect_to_server_ip(socket_fd, server_ip, port) < 0)
 	{
 		Error(errno ? strerror(errno) : "unable to connect");
 		close(socket_fd);
@@ -400,10 +400,10 @@ static int  zpot_get_global_header(int socket_fd, pcap_file_header & global_hdr,
 	return bytes_received;
 }
 
-//	get the server IP address and port number.  -1 means error, 0 OK
+//	get the server DNS name and port number.  -1 means error, 0 OK
 static int zpot_get_server_name_and_port(const std::string& path, std::string &server_name, int * port)
 {
-	// find the IP addr and port of server
+	// find the DNS name and port of server
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_server_name_and_port: path is %s", 
 			path.c_str());
 	size_t colon_pos = path.find(':');
@@ -412,7 +412,7 @@ static int zpot_get_server_name_and_port(const std::string& path, std::string &s
 		return -1;
 	}
 
-	// Extract the IP address and port number as separate strings
+	// Extract the DNS name and port number as separate strings
 	server_name = path.substr(0, colon_pos);
 	std::string port_str = path.substr(colon_pos + 1);
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_server_name_and_port: server_name is %s", 
@@ -428,10 +428,71 @@ static int zpot_get_server_name_and_port(const std::string& path, std::string &s
 	return 0;
 }
 
-//	connect to the server.  -1 is an error, 0 is OK
-static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port_number)
+//	convert DNS name to IP address.
+//	return 0 if OK, < 0 if not.
+static int zpot_resolve_server_name(std::string server_name, std::string &server_ip)
 {
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server: Connecting... ");
+	struct addrinfo hints, *res;
+        int status;
+        char ipstr[INET6_ADDRSTRLEN];
+
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_resolve_server_name: entry");
+
+	memset(&hints, 0, sizeof hints);
+	hints.ai_family = AF_UNSPEC; // AF_INET or AF_INET6 to force version
+	hints.ai_socktype = SOCK_STREAM;
+
+	if ((status = getaddrinfo(server_name.c_str(), NULL, &hints, &res)) != 0) 
+	{
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
+			"zpot_get_resolve_server_name: getaddrinfo %s",
+			gai_strerror(status));
+		return -1;
+	}
+
+	// take the first IP address we find
+	for (struct addrinfo *p = res; p != NULL; p = p->ai_next) 
+	{
+		void *addr;
+
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
+				"zpot_get_resolve_server_name: trying --");
+		// get pointer to the address itself,
+		// different fields in IPv4 and IPv6:
+		if (p->ai_family == AF_INET) { // IPv4
+		    struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
+		    addr = &(ipv4->sin_addr);
+		} else { // IPv6
+		    struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
+		    addr = &(ipv6->sin6_addr);
+		}
+
+		// convert IP to a string 
+		if (inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr) == 0)
+		{
+			PLUGIN_DBG_LOG(PcapOverTcpFoo, 
+				"zpot_get_resolve_server_name: inet_ntop: %s",
+				gai_strerror(status));
+			return -1;
+		}
+
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
+				"zpot_get_resolve_server_name: IP is %s", ipstr);	
+		server_ip = ipstr;
+		break;
+	}
+
+	freeaddrinfo(res); // free the linked list
+			 
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_resolve_server_name: exit");
+	return 0;
+}
+
+//	connect to the server.  
+//	-1 is an error, 0 is OK
+static int zpot_connect_to_server_ip(int socket_fd, std::string server_ip, int port_number)
+{
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server_ip: Connecting... ");
 	// setup server_addr for connect
 	struct sockaddr_in server_addr;
 	memset(&server_addr, 0, sizeof(server_addr));
@@ -451,7 +512,7 @@ static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port
 		{
 			// sleep, then try again
 			PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-					"zpot_connect_to_server: error %d (%s)",
+					"zpot_connect_to_server_ip: error %d (%s)",
 					delay, strerror(errno));
 			sleep(delay);
 			delay += delay;
@@ -461,10 +522,10 @@ static int zpot_connect_to_server(int socket_fd, std::string server_ip, int port
 	if ( rv < 0 ) 
 	{
 		// didn't make it
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server: connect failed ");
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server_ip: connect failed ");
 		return -1;
 	}
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server: Connected ");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_connect_to_server_ip: Connected ");
 
 	return 0;
 }
@@ -592,52 +653,4 @@ static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize, int b
 	return bytes_received;
 }
 
-static int zpot_resolve_server_name(std::string server_name, std::string &server_ip)
-{
-	struct addrinfo hints, *res;
-        int status;
-        char ipstr[INET6_ADDRSTRLEN];
-
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_resolve_server_name: entry");
-
-	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_UNSPEC; // AF_INET or AF_INET6 to force version
-	hints.ai_socktype = SOCK_STREAM;
-
-	if ((status = getaddrinfo(server_name.c_str(), NULL, &hints, &res)) != 0) 
-	{
-		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(status));
-		return -1;
-	}
-
-	// take the first IP address we find
-	for (struct addrinfo *p = res; p != NULL; p = p->ai_next) 
-	{
-		void *addr;
-
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-				"zpot_get_resolve_server_name: trying --");
-		// get pointer to the address itself,
-		// different fields in IPv4 and IPv6:
-		if (p->ai_family == AF_INET) { // IPv4
-		    struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
-		    addr = &(ipv4->sin_addr);
-		} else { // IPv6
-		    struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
-		    addr = &(ipv6->sin6_addr);
-		}
-
-		// convert IP to a string 
-		inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr);
-		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-				"zpot_get_resolve_server_name: IP is %s", ipstr);	
-		server_ip = ipstr;
-		break;
-	}
-
-	freeaddrinfo(res); // free the linked list
-			 
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_resolve_server_name: exit");
-	return 0;
-}
 
