@@ -436,7 +436,7 @@ static int zpot_resolve_server_name(std::string server_name, std::string &server
         int status;
         char ipstr[INET6_ADDRSTRLEN];
 
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_resolve_server_name: entry");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_resolve_server_name: entry");
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_UNSPEC; // AF_INET or AF_INET6 to force version
@@ -445,7 +445,7 @@ static int zpot_resolve_server_name(std::string server_name, std::string &server
 	if ((status = getaddrinfo(server_name.c_str(), NULL, &hints, &res)) != 0) 
 	{
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-			"zpot_get_resolve_server_name: getaddrinfo %s",
+			"zpot_resolve_server_name: getaddrinfo %s",
 			gai_strerror(status));
 		return -1;
 	}
@@ -456,7 +456,7 @@ static int zpot_resolve_server_name(std::string server_name, std::string &server
 		void *addr;
 
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-				"zpot_get_resolve_server_name: trying --");
+				"zpot_resolve_server_name: trying --");
 		// get pointer to the address itself,
 		// different fields in IPv4 and IPv6:
 		if (p->ai_family == AF_INET) { // IPv4
@@ -471,20 +471,20 @@ static int zpot_resolve_server_name(std::string server_name, std::string &server
 		if (inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr) == 0)
 		{
 			PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-				"zpot_get_resolve_server_name: inet_ntop: %s",
+				"zpot_resolve_server_name: inet_ntop: %s",
 				gai_strerror(status));
 			return -1;
 		}
 
 		PLUGIN_DBG_LOG(PcapOverTcpFoo, 
-				"zpot_get_resolve_server_name: IP is %s", ipstr);	
+				"zpot_resolve_server_name: IP is %s", ipstr);	
 		server_ip = ipstr;
 		break;
 	}
 
 	freeaddrinfo(res); // free the linked list
 			 
-	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_resolve_server_name: exit");
+	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_resolve_server_name: exit");
 	return 0;
 }
 
