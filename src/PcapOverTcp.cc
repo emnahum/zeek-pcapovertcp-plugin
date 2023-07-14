@@ -173,7 +173,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		{
 			// socket is out of data
 			PLUGIN_DBG_LOG(PcapOverTcpFoo, "ExtractNext: OOD");
-			close(socket_fd);
+			// close(socket_fd);
 			return false;
 		}
 
@@ -200,7 +200,7 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 		{
 			// socket is out of data
 			PLUGIN_DBG_LOG(PcapOverTcpFoo, "ExtractNext: OOD2");
-			close(socket_fd);
+			// close(socket_fd);
 			return false;
 		}
 
@@ -560,6 +560,8 @@ static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, bool
 			bytes_received);
 	if (bytes_received < 0)
 	{
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_header: errno is %d (%s)",
+				errno, strerror(errno));
 		return -1;
 	}
 
