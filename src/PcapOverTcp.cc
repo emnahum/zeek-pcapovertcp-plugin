@@ -194,13 +194,12 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			return false;
 		}
 	
-		// EOF will probably be caught above, so probably don't need this, 
-		// but just in case...	
+		// EOF is presumably caught above, so by definition don't need this,
+		// but this hack seems to work.  Here, bytes = 0 does NOT equal EOF, just try again.
 		if (bytes_received == 0) 
 		{
-			// socket is out of data
+			// socket has no bytes on the packet read.  Give up and loop again.
 			PLUGIN_DBG_LOG(PcapOverTcpFoo, "ExtractNext: OOD2");
-			// close(socket_fd);
 			return false;
 		}
 
@@ -565,7 +564,7 @@ static int zpot_get_packet_header(int socket_fd, pcap_pkthdr & current_hdr, bool
 		return -1;
 	}
 
-	// check for EOF
+	// no bytes on the connection means EOF.
 	if (bytes_received == 0)
 	{
 		return 0;
@@ -635,6 +634,8 @@ static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize, int b
 			bytes_received);
 	if (bytes_received < 0)
 	{
+		PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_get_packet_body: errno is %d (%s)",
+				errno, strerror(errno));
 		return -1;
 	}
 
@@ -642,7 +643,7 @@ static int zpot_get_packet_body(int socket_fd, char * buffer, int bufsize, int b
 	// but just in case...
 	if (bytes_received == 0)
 	{
-		// socket is out of data
+		// socket has no data, which shouldn't happen?
 		return 0;
 	}
 
