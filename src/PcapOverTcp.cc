@@ -185,6 +185,14 @@ bool PcapOverTcpSource::ExtractNextPacket(zeek::Packet* pkt)
 			return false;
 		}
 
+		// check that packet has non-zero length to receive.  Otherwise, return.
+		if ((current_hdr.caplen == 0) || (current_hdr.len == 0))
+		{
+			PLUGIN_DBG_LOG(PcapOverTcpFoo, "ExtractNext: zero caplen %d or len %d",
+					current_hdr.caplen, current_hdr.len);
+			return false;
+		}
+
 		// now read the full packet
 		bytes_received = zpot_get_packet_body(socket_fd, buffer, sizeof(buffer), 
 				current_hdr.caplen);
