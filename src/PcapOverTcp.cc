@@ -467,11 +467,11 @@ static int zpot_resolve_server_name(std::string server_name, std::string &server
 		// get pointer to the address itself,
 		// different fields in IPv4 and IPv6:
 		if (p->ai_family == AF_INET) { // IPv4
-		    struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
-		    addr = &(ipv4->sin_addr);
+			struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
+			addr = &(ipv4->sin_addr);
 		} else { // IPv6
-		    struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
-		    addr = &(ipv6->sin6_addr);
+			struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)p->ai_addr;
+			addr = &(ipv6->sin6_addr);
 		}
 
 		// convert IP to a string 
@@ -490,7 +490,7 @@ static int zpot_resolve_server_name(std::string server_name, std::string &server
 	}
 
 	freeaddrinfo(res); // free the linked list
-			 
+
 	PLUGIN_DBG_LOG(PcapOverTcpFoo, "zpot_resolve_server_name: exit");
 	return 0;
 }
